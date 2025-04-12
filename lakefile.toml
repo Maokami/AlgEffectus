@@ -2,9 +2,19 @@ name = "AlgEffectus"
 version = "0.1.0"
 defaultTargets = ["algeffectus"]
 
+[[require]]
+name = "mathlib"
+scope = "leanprover-community"
+
 [[lean_lib]]
 name = "AlgEffectus"
+srcDir = "src"
 
 [[lean_exe]]
 name = "algeffectus"
 root = "Main"
+
+
+[[lean_exe]]
+name = "tests"
+root = "Tests.All"
