@@ -1,0 +1,10 @@
+name = "AlgEffectus"
+version = "0.1.0"
+defaultTargets = ["algeffectus"]
+
+[[lean_lib]]
+name = "AlgEffectus"
+
+[[lean_exe]]
+name = "algeffectus"
+root = "Main"
