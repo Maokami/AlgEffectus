@@ -18,11 +18,14 @@ mutual -- Mutual definitions for the core syntax
   Values can be variables, boolean values, function abstractions, or handlers.
   -/
   inductive Value : Type where
-    | varV (name : Name) : Value                          -- Variable `x`
-    -- boolean values
-    | ttV : Value  | ffV : Value                          -- True, False
-    | funV (binder : Name) (body : Computation) : Value   -- Abstraction `fun x => c`
-    | handV (handler : Handler) : Value                   -- Handler `h`
+    -- Variable `x`
+    | varV (name : Name)
+    -- boolean values(`true`, `false`)
+    | ttV  | ffV : Value
+    -- Abstraction `fun x => c`
+    | funV (binder : Name) (body : Computation)
+    -- Handler `h`
+    | handV (handler : Handler)
     deriving Repr, Inhabited -- For printing, default instance
 
   /--
@@ -34,7 +37,7 @@ mutual -- Mutual definitions for the core syntax
     -- Handler structure: `{ return x => c_ret, op₁ x₁ k => c₁, ..., opₘ xₘ k => cₘ }`
     -- `opClauses` stores tuples of: (operation_name, continuation_binder, argument_binder, handler_body)
     | mk (retBinder : Name) (retBody : Computation)
-         (opClauses : List (OpName × Name × Value × Computation)) : Handler
+         (opClauses : List (OpName × Name × Name × Computation))
     deriving Repr -- For printing
 
   /--
@@ -43,12 +46,18 @@ mutual -- Mutual definitions for the core syntax
   and handler applications.
   -/
   inductive Computation : Type where
-    | retC (val : Value) : Computation -- Return a value: `return v`
-    | callC (op : OpName) (param : Value) (res: Value) (cont: Computation): Computation -- Call an operation: `op(v; y. c)`
-    | seqC (binder: Name) (body: Computation) (cont: Computation) : Computation -- Sequential binding: `do x ← c₁ in c₂`
-    | ifC (cond: Value) (thenBranch: Computation) (elseBranch: Computation) : Computation -- Conditional: `if b then c₁ else c₂`
-    | appC (func: Value) (arg: Value) : Computation -- Function application: `f(x)`
-    | withC (handler: Value) (comp: Computation) : Computation -- Handler application with a handler: `with h handle c`
+    -- Return a value: `return v`
+    | retC (val : Value)
+    -- Call an operation: `op(v; y. c)`
+    | callC (op : OpName) (arg : Value) (kBinder : Name) (kBody : Computation)
+    -- Sequential binding: `do x ← c₁ in c₂`
+    | seqC  (binder : Name) (bound : Computation) (cont : Computation)
+    -- Conditional: `if b then c₁ else c₂`
+    | ifC   (cond : Value) (thenBranch elseBranch : Computation)
+    -- Function application: `f(x)`
+    | appC  (func arg : Value)
+    -- Handler application with a handler: `with h handle c`
+    | withC (handler : Value) (comp : Computation)
     deriving Repr, Inhabited -- For printing, default instance
 end
 
@@ -69,11 +78,11 @@ def Handler.getRetClause : Handler → (Name × Computation)
 
 /-- Retrieves the list of operation clauses from a handler. -/
 @[simp]
-def Handler.getOpClauses : Handler → List (OpName × Name × Value × Computation)
+def Handler.getOpClauses : Handler → List (OpName × Name × Name × Computation)
   | Handler.mk _ _ opc => opc
 
 /-- Finds the corresponding operation clause in a handler given an operation name. -/
-def Handler.findOpClause (h : Handler) (opName : OpName) : Option (Name × Value × Computation) :=
+def Handler.findOpClause (h : Handler) (opName : OpName) : Option (Name × Name × Computation) :=
   h.getOpClauses.find? (fun (op, _, _, _) => op == opName) -- Find clause by op name
   |>.map (fun (_, x, k, body) => (x, k, body)) -- Extract (continuation_binder, arg_binder, body)
 
