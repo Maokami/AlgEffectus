@@ -1,4 +1,5 @@
 import AlgEffectus.Core.Syntax
+import AlgEffectus.Core.Substitution
 
 /-!
 # Core Semantics for Algebraic Effects and Handlers
@@ -10,77 +11,6 @@ It uses an inductive predicate `Step` to define the reduction relation.
 
 namespace AlgEffectus.Core
 
-mutual
-  /--
-  Substitution v[v'/x] for values.
-  Replaces free occurrences of targetVar with replacement value.
-  Needs proper handling of variable capture. (Simplified here)
-  -/
-  partial def substValue (targetVar : Name) (replacement : Value) : Value → Value
-    | v@(Value.varV name) =>
-      if name == targetVar then replacement else v
-    | v@(Value.ttV) | v@(Value.ffV) => v
-    | v@(Value.funV binder body) =>
-      -- If binder matches targetVar, it shadows it; stop substitution in the body.
-      -- NOTE: Proper impl requires checking free vars in replacement and alpha-renaming binder if collision occurs.
-      if binder == targetVar then v
-      else
-        -- Assuming replacement doesn't capture binder. Recurse.
-        Value.funV binder (substComp targetVar replacement body)
-    | Value.handV handler =>
-      -- Substitute inside the handler definition itself.
-      Value.handV (substHandler targetVar replacement handler)
-
-  partial def substHandler (targetVar : Name) (replacement : Value) : Handler → Handler
-    | Handler.mk retBinder retBody opClauses =>
-      let retBody' :=
-        if retBinder == targetVar then
-          retBody
-        else
-          substComp targetVar replacement retBody
-
-      let opClauses' := opClauses.map fun (op, contBinder, argBinder, handlerBody) =>
-        let shadowedByCont := (contBinder == targetVar)
-        let shadowedByArg  := (argBinder  == targetVar)
-        let handlerBody' :=
-          if shadowedByCont || shadowedByArg then
-            handlerBody
-          else
-            substComp targetVar replacement handlerBody
-
-        (op, contBinder, argBinder, handlerBody')
-
-      Handler.mk retBinder retBody' opClauses'
-
-  partial def substComp (target : Name) (replacement : Value) : Computation → Computation
-    | Computation.retC v => Computation.retC (substValue target replacement v)
-    | Computation.callC op arg k body =>
-    let arg' := substValue target replacement arg
-    let body' :=
-      if k == target then body else substComp target replacement body
-    Computation.callC op arg' k body'
-    | Computation.seqC binder bound cont =>
-      -- Substitute in the bound computation first
-      let bound' := substComp target replacement bound
-      -- Substitute in the continuation, avoiding capture by the binder
-      -- NOTE: Proper impl requires alpha-renaming binder if it conflicts with free vars in replacement.
-      if binder == target then
-        Computation.seqC binder bound' cont
-      else
-        Computation.seqC binder bound' (substComp target replacement cont)
-    | Computation.ifC cond thenBranch elseBranch =>
-      Computation.ifC (substValue target replacement cond)
-                      (substComp target replacement thenBranch)
-                      (substComp target replacement elseBranch)
-    | Computation.appC func arg =>
-      Computation.appC (substValue target replacement func)
-                       (substValue target replacement arg)
-    | Computation.withC handlerComp comp =>
-      -- Substitute in the handler value AND in the computation being handled
-      Computation.withC (substValue target replacement handlerComp)
-                        (substComp target replacement comp)
-end
-
 /-! ## Small-Step Operational Semantics (`⤳`) -/
 
 mutual
@@ -88,8 +18,7 @@ mutual
 The small-step operational semantics relation `c ⤳ c'`, defined as an inductive predicate.
 -/
 
-  inductive Step : Computation → Computation → Prop where
-    /-- Rule (Seq-S): `do x ← c₁ in c₂ ⤳ do x ← c₁' in c₂` if `c₁ ⤳ c₁'`.
+  inductive Step : Computation → Computation → PValue -> AlphaCtxule (Seq-S): `do x ← c₁ in c₂ ⤳ do x ← c₁' in c₂` if `c₁ ⤳ c₁'`.
         Steps inside the first computation of a do-block. -/
     | seq_step {x c₁ c₁' c₂} {hyStep : Step c₁ c₁'} :
         Step (Computation.seqC x c₁ c₂)
@@ -144,14 +73,11 @@ The small-step operational semantics relation `c ⤳ c'`, defined as an inductiv
         Handles a specific operation `opᵢ` using the corresponding clause `cᵢ` from the handler `h`.
         The operation's argument `v` substitutes the parameter `x` in the handler clause `cᵢ`. The original operation's continuation `y. c`, wrapped again by the handler `h`, substitutes the continuation parameter `k` in the handler clause `cᵢ`.  -/
     | with_handled
-    {h op arg x k cᵢ}
-    (hySucc : h.findOpClause op = some (x, k, cᵢ)) :
-    Step
-      (Computation.withC (Value.handV h) (Computation.callC op arg k cᵢ))
-      (substComp k (Value.funV k
-                   (Computation.withC (Value.handV h)
-                     (Computation.callC op (Value.varV k) k cᵢ)))
-                 (substComp x arg cᵢ))
+    {h op v x y k cᵢ c} {hySucc : h.findOpClause op = some (x, k, cᵢ)} :
+        Step
+          (Computation.withC (Value.handV h) (Computation.callC op v y c))
+          (substComp k (Value.funV y (Computation.withC (Value.handV h) c))
+                     (substComp x v cᵢ))
 
     /-- Rule (With-U):
       `with h handle op(v; y. c) ⤳ op(v; y. with h handle c)` if `op ∉ {op₁, . . . , opₙ}`.

@@ -1,3 +1,6 @@
+import Lean
+import Std.Data.HashSet
+
 /-!
 # Core Syntax for Algebraic Effects and Handlers
 
@@ -90,5 +93,26 @@ def Handler.findOpClause (h : Handler) (opName : OpName) : Option (Name × Name 
 def Computation.isValue : Computation → Bool
   | Computation.retC _ => true
   | _                  => false
+
+/-- Thread a `NameGenerator` together with the set of names to avoid. -/
+structure AlphaCtx where
+  gen   : Lean.NameGenerator
+  avoid : Std.HashSet Name
+deriving Inhabited
+
+namespace AlphaCtx
+
+/-- Return a fresh `Name` not in `avoid` and the updated context. -/
+partial def fresh (base : Name) (ctx : AlphaCtx) : Name × AlphaCtx :=
+  let n   := ctx.gen.curr.appendAfter base        -- `curr` gives `Name`
+  let nStr := n.toString
+  let gen := ctx.gen.next
+  if ctx.avoid.contains nStr then
+    fresh base { ctx with gen := gen }
+  else
+    (nStr, { ctx with gen := gen, avoid := ctx.avoid.insert nStr })
+
+
+end AlphaCtx
 
 end AlgEffectus.Core
