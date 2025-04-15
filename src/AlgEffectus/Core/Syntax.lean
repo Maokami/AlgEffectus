@@ -104,7 +104,7 @@ namespace AlphaCtx
 
 /-- Return a fresh `Name` not in `avoid` and the updated context. -/
 partial def fresh (base : Name) (ctx : AlphaCtx) : Name × AlphaCtx :=
-  let n   := ctx.gen.curr.appendAfter base        -- `curr` gives `Name`
+  let n   := ctx.gen.curr.appendAfter base
   let nStr := n.toString
   let gen := ctx.gen.next
   if ctx.avoid.contains nStr then

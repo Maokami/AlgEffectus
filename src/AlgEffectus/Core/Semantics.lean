@@ -18,7 +18,8 @@ mutual
 The small-step operational semantics relation `c ⤳ c'`, defined as an inductive predicate.
 -/
 
-  inductive Step : Computation → Computation → PValue -> AlphaCtxule (Seq-S): `do x ← c₁ in c₂ ⤳ do x ← c₁' in c₂` if `c₁ ⤳ c₁'`.
+  inductive Step : Computation → Computation → Prop where
+    /-- Rule (Seq-S): `do x ← c₁ in c₂ ⤳ do x ← c₁' in c₂` if `c₁ ⤳ c₁'`.
         Steps inside the first computation of a do-block. -/
     | seq_step {x c₁ c₁' c₂} {hyStep : Step c₁ c₁'} :
         Step (Computation.seqC x c₁ c₂)
