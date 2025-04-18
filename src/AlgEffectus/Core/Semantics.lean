@@ -20,7 +20,7 @@ The small-step operational semantics relation `c ⤳ c'`, defined as an inductiv
 inductive Step : Computation → Computation → Prop where
   /-- Rule (Seq-S): `do x ← c₁ in c₂ ⤳ do x ← c₁' in c₂` if `c₁ ⤳ c₁'`.
       Steps inside the first computation of a do-block. -/
-  | seq_step {x c₁ c₁' c₂} {hyStep : Step c₁ c₁'} :
+  | seq_step {x c₁ c₁' c₂} (hyStep : Step c₁ c₁') :
     Step (Computation.seqC x c₁ c₂)
          (Computation.seqC x c₁' c₂)
 
@@ -58,13 +58,13 @@ inductive Step : Computation → Computation → Prop where
 
   /-- Rule (With-S): `with h handle c ⤳ with h handle c'` if `c ⤳ c'`.
       Steps inside the computation being handled. -/
-  | with_step {h c c'} {hyStep : Step c c'} :
+  | with_step {h c c'} (hyStep : Step c c') :
     Step (Computation.withC h c)
          (Computation.withC h c')
 
   /-- Rule (With-R): `with h handle return v ⤳ cᵣ[v/x]`.
       Substitutes the returned value into the return clause of the handler. -/
-  | with_ret {x c_ret h v} {hyRet : h.getRetClause = (x, c_ret)} :
+  | with_ret {x c_ret h v} (hyRet : h.getRetClause = (x, c_ret)) :
     Step (Computation.withC (Value.handV h) (Computation.retC v))
          (substComp x v c_ret)
 
@@ -73,7 +73,7 @@ inductive Step : Computation → Computation → Prop where
       Handles a specific operation `opᵢ` using the corresponding clause `cᵢ` from the handler `h`.
       The operation's argument `v` substitutes the parameter `x` in the handler clause `cᵢ`. The original operation's continuation `y. c`, wrapped again by the handler `h`, substitutes the continuation parameter `k` in the handler clause `cᵢ`.  -/
   | with_handled
-  {h op v x y k cᵢ c} {hySucc : h.findOpClause op = some (x, k, cᵢ)} :
+  {h op v x y k cᵢ c} (hySucc : h.findOpClause op = some (x, k, cᵢ)) :
     Step
       (Computation.withC (Value.handV h) (Computation.callC op v y c))
       (substComp k (Value.funV y (Computation.withC (Value.handV h) c))
@@ -82,7 +82,7 @@ inductive Step : Computation → Computation → Prop where
   /-- Rule (With-U):
     `with h handle op(v; y. c) ⤳ op(v; y. with h handle c)` if `op ∉ {op₁, . . . , opₙ}`.
    -/
-  | with_unhandled {h opName v y c} {hy_fail : h.findOpClause opName = none} :
+  | with_unhandled {h opName v y c} (hyFail : h.findOpClause opName = none) :
     Step (Computation.withC (Value.handV h) (Computation.callC opName v y c))
          (Computation.callC opName v y (Computation.withC (Value.handV h) c))
 
@@ -113,41 +113,41 @@ match c with
 
   -- Conditional (`if cond then c₁ else c₂`)
   | Computation.ifC cond t e =>
-      match cond with
-      | Value.ttV => some t -- Rule if_true
-      | Value.ffV => some e -- Rule if_false
-      | _ => none -- Condition must be a concrete boolean value
+    match cond with
+    | Value.ttV => some t -- Rule if_true
+    | Value.ffV => some e -- Rule if_false
+    | _ => none -- Condition must be a concrete boolean value
 
   -- Application (`f v`)
   | Computation.appC f arg =>
-      match f with
-      | Value.funV x body => some (substComp x arg body) -- Rule app_β
-      | _ => none -- Cannot apply non-function value
+    match f with
+    | Value.funV x body => some (substComp x arg body) -- Rule app_β
+    | _ => none -- Cannot apply non-function value
 
   -- Handler Application (`with hVal handle comp`)
   | Computation.withC hVal comp =>
-      -- The handler itself must be a handler value
+    -- Try to step within comp (Rule with_step)
+    match step? comp with
+    | some comp' => some (Computation.withC hVal comp')
+    | none =>
       match hVal with
-      | Value.handV h =>
-          -- First, try to step within comp (Rule with_step)
-          match step? comp with
-          | some comp' => some (Computation.withC hVal comp')
-          | none =>
-              -- If comp cannot step, check if it's a return or call
-              match comp with
-              | Computation.retC v => -- Rule with_ret
-                  let (retBinder, retBody) := h.getRetClause
-                  some (substComp retBinder v retBody)
-              | Computation.callC op arg y kBody =>
-                  -- Check if the handler defines this operation
-                  match h.findOpClause op with
-                  | some (x, k, cᵢ) => -- Rule with_handled
-                      let kVal := Value.funV y (Computation.withC hVal kBody)
-                      some (substComp k kVal (substComp x arg cᵢ))
-                  | none => -- Rule with_unhandled
-                      some (Computation.callC op arg y (Computation.withC hVal kBody))
-              | _ => none -- comp is irreducible but not return/call, so withC is stuck here
-      | _ => none -- Cannot handle with a non-handler value
+         -- If hVal is a handler, check if comp can step
+        | Value.handV h =>
+          -- If comp cannot step, check if it's a return or call
+          match comp with
+          | Computation.retC v => -- Rule with_ret
+            let (retBinder, retBody) := h.getRetClause
+            some (substComp retBinder v retBody)
+          | Computation.callC op arg y kBody =>
+            -- Check if the handler defines this operation
+            match h.findOpClause op with
+            | some (x, k, cᵢ) => -- Rule with_handled
+              let kVal := Value.funV y (Computation.withC hVal kBody)
+              some (substComp k kVal (substComp x arg cᵢ))
+            | none => -- Rule with_unhandled
+              some (Computation.callC op arg y (Computation.withC hVal kBody))
+          | _ => none -- comp is irreducible but not return/call, so withC is stuck here
+        | _ => none -- hVal is not a handler, so withC is stuck here
 
   -- Plain operation calls outside a handler/seq context are stuck
   | Computation.callC .. => none
@@ -157,13 +157,86 @@ infixl:50 " ⤳ " => Step
 -- Notation for multi-step reduction
 infixl:50 " ⤳* " => Reduces
 
-/--
-The `step_of_step?` theorem states that if the `step?` function returns `some c'` for a computation `c`,
-then there exists a corresponding `Step c c'` according to the inductive definition of the `Step` relation.
+/-! ## Soundness and Completeness of the Small-Step Semantics -/
 
-In other words, this theorem ensures that the constructive implementation of `step?` adheres to the
-specification defined by the `Step` relation.
--/
-theorem step_of_step? : ∀ {c c'}, step? c = some c' → Step c c' := by sorry
+/-- The soundness theorem states that if `c` can step to `c'`, then `step? c` returns `some c'`. -/
+theorem soundness : ∀ {c c'}, Step c c' → step? c = some c' := by
+  intro c c' hStep
+  cases hStep with
+  | seq_step hyStep => simp [step?]; rw [soundness hyStep]
+  | seq_return => simp [step?]
+  | seq_op => simp [step?]
+  | if_true => simp [step?]
+  | if_false => simp [step?]
+  | app_β => simp [step?]
+  | with_step hyStep => simp [step?, soundness hyStep]
+  | with_ret hyRet => simp at hyRet; simp [step?, hyRet]
+  | with_handled hySucc => simp [step?, hySucc]
+  | with_unhandled hyFail => simp [step?, hyFail]
+
+/-- The completeness theorem states that if `step? c` returns `some c'`, then `c` can step to `c'`. -/
+theorem completeness : ∀ {c c'}, step? c = some c' → Step c c' := by
+  intro c c' hStep
+  cases c with
+  | retC _ => simp [step?] at hStep;
+  | seqC x c₁ c₂ =>
+    simp [step?] at hStep;
+    cases h₁': step? c₁ with
+    | some c₁' =>
+      simp [h₁'] at hStep; subst hStep; exact Step.seq_step (completeness h₁')
+    | none =>
+      simp [h₁'] at hStep
+      cases c₁ with
+      | retC v => simp at hStep; subst hStep; exact Step.seq_return
+      | callC op arg y kBody => simp at hStep; subst hStep; exact Step.seq_op
+      | _ => contradiction
+  | ifC cond t e =>
+    simp [step?] at hStep
+    cases cond with
+    | ttV => simp at hStep; subst hStep; exact Step.if_true
+    | ffV => simp at hStep; subst hStep; exact Step.if_false
+    | _ => contradiction
+  | appC f arg =>
+    simp [step?] at hStep
+    cases f with
+    | funV x body =>
+      simp at hStep
+      subst hStep
+      exact Step.app_β
+    | _ => contradiction
+  | withC hVal comp =>
+    simp [step?] at hStep
+    cases h₁': step? comp with
+    | some comp' =>
+      simp [h₁'] at hStep; subst hStep; exact Step.with_step (completeness h₁')
+    | none =>
+      simp [h₁'] at hStep
+      cases hVal with
+      | handV h =>
+        simp at hStep
+        cases comp with
+        | retC v =>
+          simp at hStep
+          cases h with
+          | mk rb rc opcs => subst hStep; simp [Step.with_ret]
+        | callC op arg y kBody =>
+          simp at hStep
+          match r: h.findOpClause op with
+          | some (x, k, cᵢ) =>
+            simp [r] at hStep; subst hStep; exact Step.with_handled r
+          | none =>
+            simp [r] at hStep; subst hStep; exact Step.with_unhandled r
+        | _ => contradiction
+      | _ => contradiction
+  | callC _ _ _ _ => simp [step?] at hStep
+
+/-- The equivalence theorem states that `c ⤳ c'` if and only if `step? c = some c'`. -/
+theorem step_equivalence : ∀ {c c'}, Step c c' ↔ step? c = some c' := by
+  intro c c'
+  constructor
+  · intro mp
+    exact soundness mp
+  · intro mpr
+    exact completeness mpr
 
 end AlgEffectus.Core
