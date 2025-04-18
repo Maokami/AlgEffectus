@@ -93,9 +93,77 @@ inductive Reduces : Computation → Computation → Prop where
   | refl (c : Computation) : Reduces c c
   | step {c₁ c₂ c₃} (h₁ : Step c₁ c₂) (h₂ : Reduces c₂ c₃) : Reduces c₁ c₃
 
+/-- `step?` returns `some c'` if `c` can step to `c'`, otherwise it returns `none`.  -/
+def step? (c : Computation) : Option Computation :=
+match c with
+    -- Return values are irreducible
+  | Computation.retC _ => none -- Return values are irreducible
+    -- Sequential binding (`do x ← c₁ in c₂`)
+  | Computation.seqC x c₁ c₂ =>
+    -- Try to step within the first computation (Rule seq_step)
+    match step? c₁ with
+    | some c₁' => some (Computation.seqC x c₁' c₂)
+    | none =>
+      -- If c₁ cannot step, check if it's a return or call
+      match c₁ with
+      | Computation.retC v => some (substComp x v c₂) -- Rule seq_return
+      | Computation.callC op arg y kBody => -- Rule seq_op
+          some (Computation.callC op arg y (Computation.seqC x kBody c₂))
+      | _ => none -- c₁ is irreducible but not return/call, so seqC is stuck here
+
+  -- Conditional (`if cond then c₁ else c₂`)
+  | Computation.ifC cond t e =>
+      match cond with
+      | Value.ttV => some t -- Rule if_true
+      | Value.ffV => some e -- Rule if_false
+      | _ => none -- Condition must be a concrete boolean value
+
+  -- Application (`f v`)
+  | Computation.appC f arg =>
+      match f with
+      | Value.funV x body => some (substComp x arg body) -- Rule app_β
+      | _ => none -- Cannot apply non-function value
+
+  -- Handler Application (`with hVal handle comp`)
+  | Computation.withC hVal comp =>
+      -- The handler itself must be a handler value
+      match hVal with
+      | Value.handV h =>
+          -- First, try to step within comp (Rule with_step)
+          match step? comp with
+          | some comp' => some (Computation.withC hVal comp')
+          | none =>
+              -- If comp cannot step, check if it's a return or call
+              match comp with
+              | Computation.retC v => -- Rule with_ret
+                  let (retBinder, retBody) := h.getRetClause
+                  some (substComp retBinder v retBody)
+              | Computation.callC op arg y kBody =>
+                  -- Check if the handler defines this operation
+                  match h.findOpClause op with
+                  | some (x, k, cᵢ) => -- Rule with_handled
+                      let kVal := Value.funV y (Computation.withC hVal kBody)
+                      some (substComp k kVal (substComp x arg cᵢ))
+                  | none => -- Rule with_unhandled
+                      some (Computation.callC op arg y (Computation.withC hVal kBody))
+              | _ => none -- comp is irreducible but not return/call, so withC is stuck here
+      | _ => none -- Cannot handle with a non-handler value
+
+  -- Plain operation calls outside a handler/seq context are stuck
+  | Computation.callC .. => none
+
 -- Notation for single step reduction
 infixl:50 " ⤳ " => Step
 -- Notation for multi-step reduction
 infixl:50 " ⤳* " => Reduces
+
+/--
+The `step_of_step?` theorem states that if the `step?` function returns `some c'` for a computation `c`,
+then there exists a corresponding `Step c c'` according to the inductive definition of the `Step` relation.
+
+In other words, this theorem ensures that the constructive implementation of `step?` adheres to the
+specification defined by the `Step` relation.
+-/
+theorem step_of_step? : ∀ {c c'}, step? c = some c' → Step c c' := by sorry
 
 end AlgEffectus.Core
