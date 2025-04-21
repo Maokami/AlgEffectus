@@ -3,12 +3,11 @@ import AlgEffectus.Core.Syntax
 
 /-!
 -----------------------------------------------------
-# Parser Definition
+# Elaborator Definition
 -----------------------------------------------------
 -/
-namespace Parser
+namespace Elab
 
--- open Lean Parser PrettyPrinter Delaborator SubExpr Meta Elab
 open Lean Elab Parser
 open AlgEffectus.Core
 
