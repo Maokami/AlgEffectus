@@ -1,8 +1,5 @@
-import Lean
-
-import AlgEffectus.Core.Syntax -- Import the core syntax definitions
-
--- Draft: This file is a work in progress and may not be fully functional yet.
+import lean
+import AlgEffectus.Core.Syntax
 
 /-!
 -----------------------------------------------------
@@ -25,20 +22,21 @@ syntax "true" : effVal
 syntax "false" : effVal
 syntax:25 "fun " ident " ↦ " effComp : effVal
 syntax "handler " "{" "return " ident " ↦ " effComp ("," ident "("ident ";" ident ")" " ↦ " effComp )* "}" : effVal
-syntax:1025 "(" effVal ")" : effVal
 
 -- Define the syntax for computations
-syntax:max "return " effVal : effComp -- `return` has high precedence within its scope
+syntax effVal : effComp
+syntax:max "return " effVal : effComp -- `return` keyword with trailing space
 syntax:65 "call " ident "(" effVal "; " ident ". " effComp ")" : effComp
 syntax:40   "do " ident " ← " effComp " in " effComp : effComp
 syntax:45   "if " effVal " then " effComp " else " effComp : effComp
-syntax:1024  effVal:1024 effVal:(1024+1) : effComp -- Application (Value followed by atomic value)
+syntax:1024  effVal "@" effVal : effComp -- Application (Value followed by atomic value)
 syntax:35 "with " effVal " handle " effComp : effComp
-syntax:max "(" effComp ")" : effComp
+syntax:1025 "(" effComp ")" : effComp
 
 -- Bridge syntax categories to the main 'term' category for elaboration
-syntax (name := effValParser) "eff " effVal : term
-syntax (name := effCompParser) "eff " effComp : term
+syntax (name := algEffParser) "eff " effComp : term
+syntax (name := algEffBlockParser) "eff " "{" effComp "}" : term
+
 
 -- helper function to get the name of ident
 def getIdentName (n : TSyntax `ident) : Expr :=
@@ -47,89 +45,144 @@ def getIdentName (n : TSyntax `ident) : Expr :=
 
 /-! Elaborators: Map Syntax to AST -/
 mutual
-@[term_elab effValParser]
-def elabEffVal : Term.TermElab := fun stx _ => do
-  let `(eff $val:effVal) := stx | throwUnsupportedSyntax
-  let expr ← match val with
-    | `(effVal| $n:ident) =>
-       pure (mkApp (mkConst ``Value.varV) (getIdentName n))
-    | `(effVal| true) => pure (mkConst ``Value.ttV)
-    | `(effVal| false) => pure (mkConst ``Value.ffV)
-    | `(effVal| fun $x:ident ↦ $c:effComp) =>throwUnsupportedSyntax
-      -- let c' ← elabEffComp c
-      -- return (mkApp3 (mkConst ``AlgEffectus.Core.Value.funV) x c')
-    | `(effVal| handler { return $x ↦ $c, $op:ident ($y:ident; $k:ident) ↦ $c' }) => throwUnsupportedSyntax
-      -- let c' ← elabEffComp c'
-      -- let h ← mkApp4 (mkConst ``AlgEffectus.Core.Handler.mk) x c' op y k
-      -- return h
-    | _ => throwUnsupportedSyntax
-  return expr
 
-@[term_elab effCompParser]
-def elabEffComp : Term.TermElab := fun stx _ => do
-  let `(eff $comp:effComp) := stx | throwUnsupportedSyntax
-  let expr ← match comp with
-    | `(effComp| return $v:effVal) => do
-      let v' ← elabEffVal v none
-      pure (mkApp (mkConst ``AlgEffectus.Core.Computation.retC) v')
-    | `(effComp| call $op:ident ($arg:effVal; $k:ident. $c:effComp)) =>
-      let arg' ← elabEffVal arg none
-      let c' ← elabEffComp c none
-      pure (mkApp4 (mkConst ``AlgEffectus.Core.Computation.callC) (getIdentName op) arg' (getIdentName k) c')
-    | `(effComp| do $x:ident ← $c₁:effComp in $c₂:effComp) => throwUnsupportedSyntax
-      -- let c₁' ← elabEffComp c₁
-      -- let c₂' ← elabEffComp c₂
-      -- pure (mkApp3 (mkConst ``AlgEffectus.Core.Computation.seqC) x c₁' c₂')
-    | `(effComp| if $cond:effVal then $c₁:effComp else $c₂:effComp) => throwUnsupportedSyntax
-      -- let cond' ← elabEffVal cond
-      -- let c₁' ← elabEffComp c₁
-      -- let c₂' ← elabEffComp c₂
-      -- pure (mkApp3 (mkConst ``AlgEffectus.Core.Computation.ifC) cond' c₁' c₂')
-    | `(effComp| with $h:effVal handle $c:effComp) => throwUnsupportedSyntax
-      -- let h' ← elabEffVal h
-      -- let c' ← elabEffComp c
-      -- pure (mkApp2 (mkConst ``AlgEffectus.Core.Computation.withC) h' c')
-    | `(effComp| ($f:effVal) ($arg:effVal)) => throwUnsupportedSyntax
-      -- let f' ← elabEffVal f
-      -- let arg' ← elabEffVal arg
-      -- pure (mkApp f' arg')
-    | _ => throwUnsupportedSyntax
+partial def elabValInternal : TSyntax `effVal → TermElabM Expr
+| `(effVal| $n:ident) =>
+   pure (mkApp (mkConst ``Value.varV) (getIdentName n))
+| `(effVal| true) => pure (mkConst ``Value.ttV)
+| `(effVal| false) => pure (mkConst ``Value.ffV)
+| `(effVal| fun $x:ident ↦ $c) => do
+    let body ← elabCompInternal c
+    pure (mkApp2 (mkConst ``Value.funV) (getIdentName x) body)
+| `(effVal|
+    handler { return $xRet:ident ↦ $retC:effComp
+      $[ , $opArr:ident ( $argArr:ident ; $kArr:ident ) ↦ $bodyArr:effComp ]*
+    }) => do
+  let retBinderExpr := getIdentName xRet
+  let retBodyExpr   ← elabCompInternal retC
 
-  return expr
+  -- basic type aliases used throughout the tuple construction
+  let strTy  := mkConst ``String
+  let compTy := mkConst ``Computation
+  let prodTy := mkConst ``Prod [.zero, .zero]   -- Prod type constructor
+
+  -- nested product types
+  let tyPair3 := mkApp2 prodTy strTy compTy     -- String × Computation
+  let tyPair2 := mkApp2 prodTy strTy tyPair3      -- String × (String × Computation)
+  let tupTy   := mkApp2 prodTy strTy tyPair2      -- final 3‑tuple type
+  let mut tupExprs : Array Expr := #[]
+  for i in [:opArr.size] do
+    let opSyntax   := opArr[i]!
+    let argSyntax  := argArr[i]!
+    let kSyntax    := kArr[i]!
+    let bodySyntax := bodyArr[i]!
+
+    let opNameExpr  := getIdentName opSyntax
+    let kNameExpr   := getIdentName kSyntax
+    let argNameExpr := getIdentName argSyntax
+    let bodyExpr    ← elabCompInternal bodySyntax
+    let prodMk := mkConst ``Prod.mk [.zero, .zero]      -- ∀ {α β}, α → β → α × β
+    -- String × Computation
+    let pair3  := mkApp4 prodMk strTy compTy argNameExpr bodyExpr
+    -- String × (String × Computation)
+    let pair2  := mkApp4 prodMk strTy tyPair3 kNameExpr pair3
+    -- String × (String × (String × Computation))
+    let tuple  := mkApp4 prodMk strTy tyPair2 opNameExpr pair2
+    tupExprs   := tupExprs.push tuple
+
+
+  let nilCtor    := mkConst ``List.nil  [.zero] -- ∀ {α}, List α
+  let consCtor   := mkConst ``List.cons [.zero] -- ∀ {α}, α → List α → List α
+  let nilExpr    := mkApp nilCtor tupTy         -- : List tupTy
+
+  let listExpr :=
+    tupExprs.foldr
+      (fun hd tl => mkApp3 consCtor tupTy hd tl)
+      nilExpr
+
+  let handlerStruct :=
+    mkApp3 (mkConst ``Handler.mk)
+           retBinderExpr retBodyExpr listExpr
+  let handlerExpr := mkApp (mkConst ``Value.handV) handlerStruct
+  pure handlerExpr
+| _ => throwUnsupportedSyntax
+
+partial def elabCompInternal : TSyntax `effComp → TermElabM Expr
+| `(effComp| $v:effVal) | `(effComp| return $v:effVal) => do
+  let v' ← elabValInternal v
+  pure (mkApp (mkConst ``Computation.retC) v')
+| `(effComp| call $op:ident ($arg:effVal; $k:ident. $c:effComp)) => do
+  let arg' ← elabValInternal arg
+  let c' ← elabCompInternal c
+  pure (mkApp4 (mkConst ``Computation.callC) (getIdentName op) arg' (getIdentName k) c')
+| `(effComp| do $x:ident ← $c₁:effComp in $c₂:effComp) => do
+  let c₁' ← elabCompInternal c₁
+  let c₂' ← elabCompInternal c₂
+  pure (mkApp3 (mkConst ``Computation.seqC) (getIdentName x) c₁' c₂')
+| `(effComp| if $cond:effVal then $c₁:effComp else $c₂:effComp) => do
+  let cond' ← elabValInternal cond
+  let c₁' ← elabCompInternal c₁
+  let c₂' ← elabCompInternal c₂
+  pure (mkApp3 (mkConst ``Computation.ifC) cond' c₁' c₂')
+| `(effComp| with $h:effVal handle $c:effComp) => do
+  let h' ← elabValInternal h
+  let c' ← elabCompInternal c
+  pure (mkApp2 (mkConst ``Computation.withC) h' c')
+| `(effComp| $f:effVal @ $arg:effVal) => do
+  -- throwIllFormedSyntax
+  let f' ← elabValInternal f
+  let arg' ← elabValInternal arg
+  pure (mkApp2 (mkConst ``Computation.appC) f' arg')
+| `(effComp| ($c:effComp)) => do
+  let c' ← elabCompInternal c
+  pure c'
+| _ => throwUnsupportedSyntax
 end
 
-example := eff true
+@[term_elab algEffParser]
+def elabEff : Term.TermElab := fun stx _ => do
+  let `(eff $c:effComp) := stx | throwUnsupportedSyntax
+  elabCompInternal c
 
-#guard_msgs in
-example := eff handler { return x ↦ return x, op(x; k) ↦ return x }
+@[term_elab algEffBlockParser]
+def elabEffBlock : Term.TermElab := fun stx _ => do
+  let `(eff { $c:effComp }) := stx | throwUnsupportedSyntax
+  elabCompInternal c
 
-#guard_msgs in
+/-- `eff_program foo := <computation>` expands to
+`def foo : AlgEffectus.Core.Computation := eff <computation>` -/
+syntax (name := effProgramCmd) "eff_program " ident " := " effComp : command
+
+macro_rules
+| `(eff_program $nm:ident := $c:effComp) =>
+  `(def $nm : AlgEffectus.Core.Computation := eff $c)
+
+-- test
+example := eff return true
+example := eff x
+example := eff true @ x
+example := eff (x)
+example := eff fun x ↦ return x
+example := eff handler { return x ↦ false }
+
+example := eff {
+  handler { return x ↦ return x, op1(x; k) ↦ return x }
+}
+
 example := eff
   with handler { return x ↦ return x, op(x; k) ↦ return x } handle
     do x ← return true in
     do y ← call op(x; v. return v) in
     return x
 
--- @[term_elab effValParser]
--- def elabEffVal : TermElab := fun stx _ => do
---   let expr ← match stx with
---     | `(effVal| true) => pure (mkConst ``AlgEffectus.Core.Value.ttV)
---     | `(effVal| false) => pure (mkConst ``AlgEffectus.Core.Value.ffV)
---     | _ => throwUnsupportedSyntax
---   return expr
--- @[term_elab trueEffVal]
--- def elabTrueEffVal : Term.TermElab := fun stx _ => do
---   let expr ← match stx with
---     | `(effVal| true)   => pure (Lean.mkConst ``AlgEffectus.Core.Value.ttV)
---     | _         => throwUnsupportedSyntax
---   return expr
--- @[term_elab falseEffVal]
--- def elabFalseEffVal : Term.TermElab := fun stx _ => do
---   let expr ← match stx with
---     | `(effVal| false)   => pure (Lean.mkConst ``AlgEffectus.Core.Value.ffV)
---     | _         => throwUnsupportedSyntax
---   return expr
+eff_program demo :=
+  do x ← return true in
+  return x
 
-
--- tests
-#eval true
+eff_program demo2 :=
+  with handler { return x ↦ return x,
+                 op1(x; k) ↦ return x,
+                 op2(x; k) ↦ k @ x } handle
+    do x ← return true in
+    do y ← call op2(a; v. return v) in
+    return x
