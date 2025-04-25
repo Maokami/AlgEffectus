@@ -63,15 +63,15 @@ private def unpackProd (e : Expr) : Option (Expr × Expr) :=
   | _ => none
 
 /-- Unpack the nested triple encoding produced in `Elab.lean` for
-    an operation clause. Returns `(opName, kName, argName, bodyExpr)`. -/
+    an operation clause. Returns `(opName, argName, kName, bodyExpr)`. -/
 private def unpackOpTuple (e : Expr) : Option (String × String × String × Expr) := do
   let (opExpr, rest₁) ← unpackProd e
-  let (kExpr,  rest₂) ← unpackProd rest₁
-  let (argExpr, body) ← unpackProd rest₂
+  let (argExpr,  rest₂) ← unpackProd rest₁
+  let (kExpr, body) ← unpackProd rest₂
   let Expr.lit (.strVal op)  := opExpr  | none
-  let Expr.lit (.strVal k)   := kExpr   | none
-  let Expr.lit (.strVal arg) := argExpr | none
-  pure (op, k, arg, body)
+  let Expr.lit (.strVal arg)   :=  argExpr  | none
+  let Expr.lit (.strVal k) := kExpr | none
+  pure (op, arg, k, body)
 
 /-- Recursively collect the head elements of a `List.cons` chain. -/
 private partial def collectList (e : Expr) : Array Expr :=

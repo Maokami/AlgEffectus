@@ -42,6 +42,24 @@ def getIdentName (n : TSyntax `ident) : Expr :=
   let nameStr := n.getId.toString
   Expr.lit (Literal.strVal nameStr)
 
+/-- Build the nested product `(opName, argName, (kName, body))`
+    encoded as `String × (String × (String × Computation))`. -/
+private def mkOpTuple (opName argName kName bodyExpr : Expr) : Expr := by
+  -- basic constants
+  let strTy  := mkConst ``String
+  let compTy := mkConst ``Computation
+  let prodTy := mkConst ``Prod [.zero, .zero]
+  let prodMk := mkConst ``Prod.mk  [.zero, .zero]
+
+  -- k × body : String × Computation
+  let pair3 := mkApp4 prodMk strTy compTy kName bodyExpr
+  -- arg × (k × body) : String × (String × Computation)
+  let pair2Ty := mkApp2 prodTy strTy compTy
+  let pair2   := mkApp4 prodMk strTy pair2Ty argName pair3
+  -- op × (arg × (k × body))
+  let pair1Ty := mkApp2 prodTy strTy pair2Ty
+  exact mkApp4 prodMk strTy pair1Ty opName pair2
+
 /-! Elaborators: Map Syntax to AST -/
 mutual
 
@@ -80,14 +98,10 @@ partial def elabValInternal : TSyntax `effVal → TermElabM Expr
     let argNameExpr := getIdentName argSyntax
     let kNameExpr   := getIdentName kSyntax
     let bodyExpr    ← elabCompInternal bodySyntax
-    let prodMk := mkConst ``Prod.mk [.zero, .zero]      -- ∀ {α β}, α → β → α × β
-    -- String × Computation
-    let pair3  := mkApp4 prodMk strTy compTy kNameExpr bodyExpr
-    -- String × (String × Computation)
-    let pair2  := mkApp4 prodMk strTy tyPair3 argNameExpr pair3
-    -- String × (String × (String × Computation))
-    let tuple  := mkApp4 prodMk strTy tyPair2 opNameExpr pair2
-    tupExprs   := tupExprs.push tuple
+
+    -- build (op, arg, k, body) tuple with helper
+    let tuple := mkOpTuple opNameExpr argNameExpr kNameExpr bodyExpr
+    tupExprs := tupExprs.push tuple
 
 
   let nilCtor    := mkConst ``List.nil  [.zero] -- ∀ {α}, List α
