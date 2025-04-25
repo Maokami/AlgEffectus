@@ -20,7 +20,8 @@ syntax ident : effVal
 syntax "true" : effVal
 syntax "false" : effVal
 syntax:25 "fun " ident " ↦ " effComp : effVal
-syntax "handler " "{" "return " ident " ↦ " effComp ("," ident "("ident ";" ident ")" " ↦ " effComp )* "}" : effVal
+syntax opClause := ident "(" ident ";" ident ")" "↦" effComp
+syntax "handler " "{" "return " ident "↦" effComp ("," opClause)* "}" : effVal
 
 -- Define the syntax for computations
 syntax effVal : effComp
@@ -28,14 +29,13 @@ syntax:max "return " effVal : effComp -- `return` keyword with trailing space
 syntax:65 "call " ident "(" effVal "; " ident ". " effComp ")" : effComp
 syntax:40   "do " ident " ← " effComp " in " effComp : effComp
 syntax:45   "if " effVal " then " effComp " else " effComp : effComp
-syntax:1024  effVal "@" effVal : effComp -- Application (Value followed by atomic value)
+syntax:1024 (name := effApp) effVal "@" effVal : effComp -- Application:  v @ w
 syntax:35 "with " effVal " handle " effComp : effComp
 syntax:1025 "(" effComp ")" : effComp
 
 -- Bridge syntax categories to the main 'term' category for elaboration
 syntax (name := algEffParser) "eff " effComp : term
 syntax (name := algEffBlockParser) "eff " "{" effComp "}" : term
-
 
 -- helper function to get the name of ident
 def getIdentName (n : TSyntax `ident) : Expr :=
@@ -77,14 +77,14 @@ partial def elabValInternal : TSyntax `effVal → TermElabM Expr
     let bodySyntax := bodyArr[i]!
 
     let opNameExpr  := getIdentName opSyntax
-    let kNameExpr   := getIdentName kSyntax
     let argNameExpr := getIdentName argSyntax
+    let kNameExpr   := getIdentName kSyntax
     let bodyExpr    ← elabCompInternal bodySyntax
     let prodMk := mkConst ``Prod.mk [.zero, .zero]      -- ∀ {α β}, α → β → α × β
     -- String × Computation
-    let pair3  := mkApp4 prodMk strTy compTy argNameExpr bodyExpr
+    let pair3  := mkApp4 prodMk strTy compTy kNameExpr bodyExpr
     -- String × (String × Computation)
-    let pair2  := mkApp4 prodMk strTy tyPair3 kNameExpr pair3
+    let pair2  := mkApp4 prodMk strTy tyPair3 argNameExpr pair3
     -- String × (String × (String × Computation))
     let tuple  := mkApp4 prodMk strTy tyPair2 opNameExpr pair2
     tupExprs   := tupExprs.push tuple
@@ -185,3 +185,5 @@ eff_program demo2 :=
     do x ← return true in
     do y ← call op2(a; v. return v) in
     return x
+
+#eval demo2

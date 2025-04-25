@@ -1,6 +1,8 @@
 import AlgEffectus.Core.Syntax
 import AlgEffectus.Core.Substitution
 
+import AlgEffectus.Core.Delab
+import AlgEffectus.Core.PrettyPrint
 /-!
 # Core Semantics for Algebraic Effects and Handlers
 
@@ -30,7 +32,7 @@ inductive Step : Computation → Computation → Prop where
     Step (Computation.seqC x (Computation.retC v) c)
          (substComp x v c)
 
-  /-- Rule (Seq-O): `do x ← op(v; y. c₁) in c₂ ⤳ op(v ; y. do x ← c₁ in c₂)`.
+  /-- Rule (Seq-O): `do x ← call op(v; y. c₁) in c₂ ⤳ call op(v ; y. do x ← c₁ in c₂)`.
       Propagates an operation out of a do-block. -/
   | seq_op {op x v y c₁ c₂} :
     Step (Computation.seqC x (Computation.callC op v y c₁) c₂)
@@ -69,7 +71,7 @@ inductive Step : Computation → Computation → Prop where
          (substComp x v c_ret)
 
   /-- Rule (With-H):
-      `with h handle opᵢ(v; y. c) ⤳ cᵢ[v/x][(fun y ↦ with h handle c)/k]`.
+      `with h handle call opᵢ(v; y. c) ⤳ cᵢ[v/x][(fun y ↦ with h handle c)/k]`.
       Handles a specific operation `opᵢ` using the corresponding clause `cᵢ` from the handler `h`.
       The operation's argument `v` substitutes the parameter `x` in the handler clause `cᵢ`. The original operation's continuation `y. c`, wrapped again by the handler `h`, substitutes the continuation parameter `k` in the handler clause `cᵢ`.  -/
   | with_handled
@@ -80,7 +82,7 @@ inductive Step : Computation → Computation → Prop where
                  (substComp x v cᵢ))
 
   /-- Rule (With-U):
-    `with h handle op(v; y. c) ⤳ op(v; y. with h handle c)` if `op ∉ {op₁, . . . , opₙ}`.
+    `with h handle op(v; y. c) ⤳ call op(v; y. with h handle c)` if `op ∉ {op₁, . . . , opₙ}`.
    -/
   | with_unhandled {h opName v y c} (hyFail : h.findOpClause opName = none) :
     Step (Computation.withC (Value.handV h) (Computation.callC opName v y c))
@@ -238,5 +240,27 @@ theorem step_equivalence : ∀ {c c'}, Step c c' ↔ step? c = some c' := by
     exact soundness mp
   · intro mpr
     exact completeness mpr
+
+/--  interp runs recursively the small-step semantics to a fixpoint. -/
+partial def interp (c : Computation) : Computation :=
+  match step? c with
+  | some c' => interp c'
+  | none    => c
+
+eff_program demo := if true then return x else return y
+
+eff_program demo2 :=
+  with handler { return x ↦ return true,
+                 op1(x; k) ↦ return false,
+                 read(x; k) ↦ k @ Bob } handle
+    do x ← call read(a; v. fun v ↦ return v) in
+    return x
+
+#eval demo2
+#eval (step? demo2).get!
+#eval (step? (step? demo2).get!).get!
+-- Examples of evaluation
+#eval interp demo
+#eval interp demo2
 
 end AlgEffectus.Core

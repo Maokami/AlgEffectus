@@ -51,7 +51,7 @@ mutual -- Mutual definitions for the core syntax
   inductive Computation : Type where
     -- Return a value: `return v`
     | retC (val : Value)
-    -- Call an operation: `op(v; y. c)`
+    -- Call an operation: `call op(v; y. c)`
     | callC (op : OpName) (arg : Value) (kBinder : Name) (kBody : Computation)
     -- Sequential binding: `do x ← c₁ in c₂`
     | seqC  (binder : Name) (bound : Computation) (cont : Computation)
