@@ -1,10 +1,13 @@
 import Lean
 import Lean.PrettyPrinter
 import AlgEffectus.Core.Syntax
+import AlgEffectus.Core.Parser
 import AlgEffectus.Core.Elab
 
+namespace AlgEffectus.Core
+namespace Delab
 
-open Lean PrettyPrinter.Delaborator SubExpr Expr Elab
+open Lean PrettyPrinter.Delaborator SubExpr Expr Elab Parser
 
 /-!  Coercions: `effVal` / `effComp` syntax → ordinary `term` syntax.
 
@@ -17,8 +20,6 @@ instance : Coe (TSyntax `effVal) (TSyntax `term) where
 
 instance : Coe (TSyntax `effComp) (TSyntax `term) where
   coe := fun stx => ⟨stx.raw⟩
-
-namespace AlgEffectus.Core
 
 /-- Helper: convert a `String` into an `ident` token. -/
 private def mkIdentFromStr (s : String) : TSyntax `ident :=
@@ -180,9 +181,10 @@ private partial def collectList (e : Expr) : Array Expr :=
   let innerStx : TSyntax `effComp := ⟨innerTerm.raw⟩
   `(eff $innerStx)
 
-#check (Computation.retC (Value.varV "x"))
 
-#check (Computation.seqC "y"
+#eval eff return x
+
+#eval (Computation.seqC "y"
           (Computation.retC (Value.ttV))
           (Computation.retC (Value.varV "y")))
 
@@ -191,5 +193,5 @@ def exampleComp₂ : Computation :=
     (Computation.retC (Value.ttV))
     (Computation.retC (Value.varV "y"))
 
-/-! End of pretty‑printer integration -/
+end Delab
 end AlgEffectus.Core

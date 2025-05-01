@@ -114,5 +114,4 @@ partial def fresh (base : Name) (ctx : AlphaCtx) : Name × AlphaCtx :=
 
 
 end AlphaCtx
-
 end AlgEffectus.Core

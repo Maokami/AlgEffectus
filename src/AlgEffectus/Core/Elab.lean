@@ -1,49 +1,21 @@
-import lean
+import Lean
 import AlgEffectus.Core.Syntax
+import AlgEffectus.Core.Parser
 
 /-!
 -----------------------------------------------------
 # Elaborator Definition
 -----------------------------------------------------
 -/
+namespace AlgEffectus.Core
 namespace Elab
 
-open Lean Elab Parser
-open AlgEffectus.Core
+open Lean Lean.Elab AlgEffectus.Core.Parser
 
--- Declare syntax categories for values and computations
-declare_syntax_cat effVal
-declare_syntax_cat effComp
-
--- Define the syntax for values
-syntax ident : effVal
-syntax "true" : effVal
-syntax "false" : effVal
-syntax:25 "fun " ident " ↦ " effComp : effVal
-syntax opClause := ident "(" ident ";" ident ")" "↦" effComp
-syntax "handler " "{" "return " ident "↦" effComp ("," opClause)* "}" : effVal
-
--- Define the syntax for computations
-syntax effVal : effComp
-syntax:max "return " effVal : effComp -- `return` keyword with trailing space
-syntax:65 "call " ident "(" effVal "; " ident ". " effComp ")" : effComp
-syntax:40   "do " ident " ← " effComp " in " effComp : effComp
-syntax:45   "if " effVal " then " effComp " else " effComp : effComp
-syntax:1024 (name := effApp) effVal "@" effVal : effComp -- Application:  v @ w
-syntax:35 "with " effVal " handle " effComp : effComp
-syntax:1025 "(" effComp ")" : effComp
-
--- Bridge syntax categories to the main 'term' category for elaboration
-syntax (name := algEffParser) "eff " effComp : term
-syntax (name := algEffBlockParser) "eff " "{" effComp "}" : term
-
--- helper function to get the name of ident
-def getIdentName (n : TSyntax `ident) : Expr :=
+private def getIdentName (n : TSyntax `ident) : Expr :=
   let nameStr := n.getId.toString
   Expr.lit (Literal.strVal nameStr)
 
-/-- Build the nested product `(opName, argName, (kName, body))`
-    encoded as `String × (String × (String × Computation))`. -/
 private def mkOpTuple (opName argName kName bodyExpr : Expr) : Expr := by
   -- basic constants
   let strTy  := mkConst ``String
@@ -59,6 +31,7 @@ private def mkOpTuple (opName argName kName bodyExpr : Expr) : Expr := by
   -- op × (arg × (k × body))
   let pair1Ty := mkApp2 prodTy strTy pair2Ty
   exact mkApp4 prodMk strTy pair1Ty opName pair2
+
 
 /-! Elaborators: Map Syntax to AST -/
 mutual
@@ -152,12 +125,12 @@ partial def elabCompInternal : TSyntax `effComp → TermElabM Expr
 | _ => throwUnsupportedSyntax
 end
 
-@[term_elab algEffParser]
+@[term_elab Parser.algEffParser]
 def elabEff : Term.TermElab := fun stx _ => do
   let `(eff $c:effComp) := stx | throwUnsupportedSyntax
   elabCompInternal c
 
-@[term_elab algEffBlockParser]
+@[term_elab Parser.algEffBlockParser]
 def elabEffBlock : Term.TermElab := fun stx _ => do
   let `(eff { $c:effComp }) := stx | throwUnsupportedSyntax
   elabCompInternal c
@@ -201,3 +174,6 @@ eff_program demo2 :=
     return x
 
 #eval demo2
+
+end Elab
+end AlgEffectus.Core
