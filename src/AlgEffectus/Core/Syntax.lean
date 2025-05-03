@@ -15,7 +15,7 @@ abbrev Name := String
 /-- Type alias for operation names. Using String for simplicity. -/
 abbrev OpName := String
 
-mutual -- Mutual definitions for the core syntax
+mutual
   /--
   Represents values `v` in the language.
   Values can be variables, boolean values, function abstractions, or handlers.

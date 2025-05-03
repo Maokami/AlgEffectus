@@ -2,9 +2,9 @@ import Lean
 import AlgEffectus.Core.Syntax
 
 /-!
------------------------------------------------------
 # Parser Definition
------------------------------------------------------
+
+This module defines the parser for the abstract syntax of algebraic effects and handlers.
 -/
 
 namespace AlgEffectus.Core
@@ -15,8 +15,6 @@ open Lean Lean.Parser
 -- Declare syntax categories for values and computations
 declare_syntax_cat effVal
 declare_syntax_cat effComp
--- declare_syntax_cat effValTy
--- declare_syntax_cat effCompTy
 
 -- Define the syntax for values
 syntax ident : effVal
