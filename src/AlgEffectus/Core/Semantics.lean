@@ -252,7 +252,7 @@ eff_program demo := if true then return x else return y
 eff_program demo2 :=
   with handler { return x ↦ return true,
                  op1(x; k) ↦ return false,
-                 read(x; k) ↦ k @ Bob } handle
+                 read(x; k) ↦ k Bob } handle
     do x ← call read(a; v. fun v ↦ return v) in
     return x
 

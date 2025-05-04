@@ -16,7 +16,7 @@ mutual
     | .varV n       => n
     | .ttV          => "true"
     | .ffV          => "false"
-    | .funV x c     => s!"fun {x} ⇒ {ppComp c}"
+    | .funV x c     => s!"fun {x} ↦ {ppComp c}"
     | .handV h      => ppHandler h
 
   /-- Pretty-print a `Handler`. -/
@@ -34,7 +34,7 @@ mutual
     | .callC op arg k c     => s!"call {op} ({ppVal arg}; {k}. {ppComp c})"
     | .seqC x c₁ c₂         => s!"do {x} ← {ppComp c₁} in {ppComp c₂}"
     | .ifC b t e            => s!"if {ppVal b} then {ppComp t} else {ppComp e}"
-    | .appC f a             => s!"{ppVal f} @ {ppVal a}"
+    | .appC f a             => s!"{ppVal f} {ppVal a}"
     | .withC h c            => s!"with {ppVal h} handle {ppComp c}"
 end
 
@@ -72,7 +72,7 @@ instance : Repr Handler where
 eff_program demo2 :=
   with handler { return x ↦ return x,
                  op1(x; k) ↦ return x,
-                 op2(x; k) ↦ k @ x } handle
+                 op2(x; k) ↦ k x } handle
     do x ← return true in
     do y ← call op2(a; v. return v) in
     return x
