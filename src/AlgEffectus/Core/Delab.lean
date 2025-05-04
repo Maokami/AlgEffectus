@@ -160,11 +160,9 @@ private partial def collectList (e : Expr) : Array Expr :=
   let aTerm ← PrettyPrinter.delab a
   let fStx : TSyntax `effVal := ⟨fTerm.raw⟩
   let aStx : TSyntax `effVal := ⟨aTerm.raw⟩
-  -- Build raw syntax node  (effApp)  and coerce to `effComp`
-  let atTok : Syntax := mkAtom "@"
-  let raw   : Syntax := mkNode ``effApp #[fStx, atTok, aStx]
+  let raw   : Syntax := mkNode ``effApp #[fStx, aStx]
   let comp : TSyntax `effComp := ⟨raw⟩
-  pure comp            -- implicit coercion to `TSyntax term`
+  pure comp
 
 @[delab Computation.withC] def delabCompWith : Delab := do
   let e ← getExpr

@@ -117,8 +117,7 @@ partial def elabCompInternal : TSyntax `effComp → TermElabM Expr
   let h' ← elabValInternal h
   let c' ← elabCompInternal c
   pure (mkApp2 (mkConst ``Computation.withC) h' c')
-| `(effComp| $f:effVal @ $arg:effVal) => do
-  -- throwIllFormedSyntax
+| `(effComp| $f:effVal $arg:effVal) => do
   let f' ← elabValInternal f
   let arg' ← elabValInternal arg
   pure (mkApp2 (mkConst ``Computation.appC) f' arg')
@@ -149,7 +148,7 @@ macro_rules
 -- test
 example := eff return true
 example := eff x
-example := eff true @ x
+example := eff true x
 example := eff (x)
 example := eff fun x ↦ return x
 example := eff handler { return x ↦ false }
@@ -171,7 +170,7 @@ eff_program demo :=
 eff_program demo2 :=
   with handler { return x ↦ return x,
                  op1(x; k) ↦ return x,
-                 op2(x; k) ↦ k @ x } handle
+                 op2(x; k) ↦ k x } handle
     do x ← return true in
     do y ← call op2(a; v. return v) in
     return x

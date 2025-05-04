@@ -30,7 +30,7 @@ syntax:max "return " effVal : effComp -- `return` keyword with trailing space
 syntax:65 "call " ident "(" effVal "; " ident ". " effComp ")" : effComp
 syntax:40   "do " ident " ← " effComp " in " effComp : effComp
 syntax:45   "if " effVal " then " effComp " else " effComp : effComp
-syntax:1024 (name := effApp) effVal "@" effVal : effComp -- Application:  v @ w
+syntax:1024 (name := effApp) effVal effVal : effComp
 syntax:35 "with " effVal " handle " effComp : effComp
 syntax:1025 "(" effComp ")" : effComp
 
