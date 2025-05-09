@@ -1,9 +1,6 @@
 import AlgEffectus.Core.Syntax
-import Lean.Data.RBMap
+import Std.Data.HashMap
 import Mathlib.Data.Finset.Basic
-
-import Aesop
-import LeanCopilot
 
 /-!
 # Core Type System for Algebraic Effects and Handlers
@@ -11,7 +8,7 @@ import LeanCopilot
 This module defines the core type system for algebraic effects and handlers.
 -/
 
-open scoped Finset Lean.RBMap
+open scoped Finset Std.HashMap
 
 namespace AlgEffectus.Core
 
@@ -42,11 +39,11 @@ namespace CTy
     ops.foldl (fun s op => s.erase op) Δ
 end CTy
 
-abbrev Ctx := Lean.RBMap Name VTy (compare)
+abbrev Ctx := Std.HashMap Name VTy
 
 namespace Ctx
   def insertMany (Γ : Ctx) (l : List (Name × VTy)) : Ctx :=
-    l.foldl (fun m ⟨x, τ⟩ => Lean.RBMap.insert m x τ) Γ
+    l.foldl (fun m ⟨x, τ⟩ => Std.HashMap.insert m x τ) Γ
 end Ctx
 
 /-- Parameter/result pair for an operation. -/
@@ -55,17 +52,17 @@ structure OpSig where
   res : VTy
 
 /-- A global signature mapping (`σ`) each `OpName` to its parameter/return types. -/
-abbrev OpSigMap := Lean.RBMap OpName OpSig (compare)
+abbrev OpSigMap := Std.HashMap OpName OpSig
 
 /-! ## Typing judgements -/
 mutual
   /-- Typing judgement for values and computations. -/
   inductive TyVal :
     (σ : OpSigMap) → (Γ : Ctx) → Value → VTy → Prop
-  | var  {x A}  (hx: Γ.find? x = some A) : TyVal σ Γ (Value.varV x) A
+  | var  {x A}  (hx: Γ.get? x = some A) : TyVal σ Γ (Value.varV x) A
   | tt : TyVal σ Γ Value.ttV VTy.boolT
   | ff : TyVal σ Γ Value.ffV VTy.boolT
-  | funV {x A C body} (hbody : TyComp σ (Γ.insert x A) body C) : TyVal σ Γ (Value.funV x body) (VTy.funT A C)
+  | fun_ {x A C body} (hbody : TyComp σ (Γ.insert x A) body C) : TyVal σ Γ (Value.funV x body) (VTy.funT A C)
   | hand {h C D} (th : TyHdl σ Γ h C D) : TyVal σ Γ (Value.handV h) (VTy.hdlT C D)
 
   /-- Handler typing (*auxiliary*, mirror of rule (Handler) in the paper). -/
@@ -79,7 +76,7 @@ mutual
       (ops :
         ∀ {op x k body Aop Bop},
         (op, x, k, body) ∈ opcs →
-        σ.find? op = some ⟨Aop, Bop⟩ →
+        σ.get? op = some ⟨Aop, Bop⟩ →
         TyComp
           σ
           (Γ.insertMany
@@ -99,16 +96,16 @@ mutual
   (σ : OpSigMap) → (Γ : Ctx)  → Computation → CTy → Prop
   | ret   {v A Δ}        : TyVal σ Γ v A →
                              TyComp σ Γ (Computation.retC v) (A !{Δ})
-  | call  {Γ op arg y body Aop Bop A Δ}
-          (sig  : σ.find? op = some ⟨Aop, Bop⟩)
+  | call_  {Γ op arg y body Aop Bop A Δ}
+          (sig  : σ.get? op = some ⟨Aop, Bop⟩)
           (targ : TyVal σ Γ arg Aop)
           (tcont: TyComp σ (Γ.insert y Bop) body (A !{Δ}))
           (mem  : op ∈ Δ)
           : TyComp σ Γ (Computation.callC op arg y body) (A !{Δ})
-  | seq   {Γ c₁ c₂ A B Δ}
-          (t1 : TyComp σ Γ c₁ (A !{Δ}))
-          (t2 : TyComp σ (Γ.insert "_" A) c₂ (B !{Δ}))   -- “_” dummy binder
-          : TyComp σ Γ (Computation.seqC "_" c₁ c₂) (B !{Δ})
+  | seq   {Γ x c₁ c₂ A B Δ}
+          (t₁ : TyComp σ Γ c₁ (A !{Δ}))
+          (t₂ : TyComp σ (Γ.insert x A) c₂ (B !{Δ}))
+          : TyComp σ Γ (Computation.seqC x c₁ c₂) (B !{Δ})
   | if_   {Γ b t e A Δ}
           (tb : TyVal σ Γ b VTy.boolT)
           (tt : TyComp σ Γ t (A !{Δ}))
@@ -121,5 +118,10 @@ mutual
                             (tc : TyComp σ Γ c C)
                             : TyComp σ Γ (Computation.withC h c) D
 end
+
+namespace Typing
+scoped notation:55 σ ", " Γ " ⊢ᵥ " v " : " A => TyVal σ Γ v A
+scoped notation:55 σ ", " Γ " ⊢ " c " : " C => TyComp σ Γ c C
+end Typing
 
 end AlgEffectus.Core

@@ -154,10 +154,12 @@ match c with
   -- Plain operation calls outside a handler/seq context are stuck
   | Computation.callC .. => none
 
+namespace Semantics
 -- Notation for single step reduction
-infixl:50 " ⤳ " => Step
+scoped infixl:50 " ⤳ " => Step
 -- Notation for multi-step reduction
-infixl:50 " ⤳* " => Reduces
+scoped infixl:50 " ⤳* " => Reduces
+end Semantics
 
 /-! ## Soundness and Completeness of the Small-Step Semantics -/
 
@@ -257,8 +259,8 @@ eff_program demo2 :=
     return x
 
 #eval demo2
-#eval (step? demo2).get!
-#eval (step? (step? demo2).get!).get!
+#eval! (step? demo2).get!
+#eval! (step? (step? demo2).get!).get!
 -- Examples of evaluation
 #eval interp demo
 #eval interp demo2

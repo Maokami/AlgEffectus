@@ -14,8 +14,7 @@ mutual
   Capture-avoiding substitution with α-renaming (Monadic version).
   Replaces free occurrences of targetVar with replacement value.
   -/
-  partial def substValueM (target : Name) (repl : Value)
-      : Value -> AlphaSubstM Value
+  def substValueM (target : Name) (repl : Value) : Value -> AlphaSubstM Value
   | Value.varV n => do
     if n = target then return repl else return (Value.varV n)
   | Value.funV x body => do
@@ -38,20 +37,36 @@ mutual
     return (Value.handV h')
   | v => return v
 
-  partial def substHandlerM (target : Name) (repl : Value)
-      : Handler -> AlphaSubstM Handler
+  termination_by
+    v => sizeOfValue v
+  decreasing_by
+    repeat dsimp [sizeOfValue]; simp
+
+  def substHandlerM (target : Name) (repl : Value) : Handler -> AlphaSubstM Handler
   | Handler.mk rb rc opcs => do
     let rc' ← if rb = target then (return rc) else substCompM target repl rc
-    let opcs' ← opcs.foldlM (init := []) fun acc (op, x, k, c) => do
-      if x = target || k = target then
-        return (op, x, k, c) :: acc
+    let opcs' ← opcs.foldlM (init := []) fun acc opcl => do
+      let (op, x, k, _) := opcl
+      if x = target || k = target then return opcl :: acc
       else
-        let c' ← substCompM target repl c
+        let c' ← substCompM target repl opcl.snd.snd.snd
         return (op, x, k, c') :: acc
+    return Handler.mk rb rc' opcs'.reverse
 
-    return Handler.mk rb rc' opcs'.reverse -- 리스트 순서 복원
+  termination_by
+    h => sizeOfHandler h
+  decreasing_by
+    rename_i h_mem
+    dsimp [sizeOfHandler]
+    have h₁ : sizeOfComp opcl.snd.snd.snd ≤ sizeOfOpClauses opcs := by
+      induction h_mem with
+      | head _ => dsimp [sizeOfOpClauses]; simp
+      | tail _ _ ih₁=>
+        simp [sizeOfOpClauses, Nat.le_trans ih₁]
+    simp +arith [Nat.le_trans h₁]
+    dsimp [sizeOfHandler]; simp +arith
 
-  partial def substCompM (target : Name) (repl : Value) : Computation → AlphaSubstM Computation
+  def substCompM (target : Name) (repl : Value) : Computation → AlphaSubstM Computation
   | Computation.retC v => do
     let v' ← substValueM target repl v
     return (Computation.retC v')
@@ -83,6 +98,10 @@ mutual
     let c' ← substCompM target repl c
     return (Computation.withC h' c')
 
+  termination_by
+    c => sizeOfComp c
+  decreasing_by
+    repeat dsimp [sizeOfComp]; simp +arith
 end
 
 /--

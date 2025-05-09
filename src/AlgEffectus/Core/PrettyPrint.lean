@@ -13,7 +13,7 @@ open Lean Meta
 mutual
   /-- Pretty-print a `Value`. -/
   private partial def ppVal : Value → String
-    | .varV n       => n
+    | .varV n       => n.toString
     | .ttV          => "true"
     | .ffV          => "false"
     | .funV x c     => s!"fun {x} ⇒ {ppComp c}"
@@ -49,24 +49,24 @@ instance : Repr Value where
 instance : Repr Handler where
   reprPrec h _ := Lean.format <| PP.ppHandler h
 
-#eval (Computation.retC (Value.varV "x"))
+#eval (Computation.retC (Value.varV (.str .anonymous "x")))
 
-#eval (Computation.seqC "y"
+#eval (Computation.seqC (.str .anonymous "y")
           (Computation.retC (Value.ttV))
-          (Computation.retC (Value.varV "y")))
+          (Computation.retC (Value.varV (.str .anonymous "y"))))
 
 #eval (Value.handV
-          (Handler.mk "x"
-            (Computation.retC (Value.varV "y"))
+          (Handler.mk (.str .anonymous "x")
+            (Computation.retC (Value.varV (.str .anonymous "y")))
             []))
 
 #eval (Value.handV
-          (Handler.mk "x"
-            (Computation.retC (Value.varV "x"))
-            [("op", "v", "k",
-              Computation.appC (Value.varV "k") (Value.varV "v")),
-              ("op2", "v2", "k2",
-              Computation.appC (Value.varV "k2") (Value.varV "v2"))
+          (Handler.mk (.str .anonymous "x")
+            (Computation.retC (Value.varV (.str .anonymous "x")))
+            [((.str .anonymous "op"), (.str .anonymous "v"), (.str .anonymous "k"),
+              Computation.appC (Value.varV (.str .anonymous "k")) (Value.varV (.str .anonymous "v"))),
+              ((.str .anonymous "op2"), (.str .anonymous "v2"), (.str .anonymous "k2"),
+              Computation.appC (Value.varV (.str .anonymous "k2")) (Value.varV (.str .anonymous "v2")))
               ]))
 
 eff_program demo2 :=

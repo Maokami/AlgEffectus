@@ -1,22 +1,22 @@
 name = "AlgEffectus"
 version = "0.1.0"
 defaultTargets = ["algeffectus"]
-moreLinkArgs = ["-L./.lake/packages/LeanCopilot/.lake/build/lib", "-lctranslate2"]
+# moreLinkArgs = ["-L./.lake/packages/LeanCopilot/.lake/build/lib", "-lctranslate2"]
 
 [[require]]
 name = "mathlib"
 scope = "leanprover-community"
-rev = "v4.19.0"
+rev = "v4.20.0-rc2"
 
-[[require]]
-name = "LeanCopilot"
-git = "https://github.com/lean-dojo/LeanCopilot.git"
-rev = "v4.19.0"
+# [[require]]
+# name = "LeanCopilot"
+# git = "https://github.com/lean-dojo/LeanCopilot.git"
+# rev = "main"
 
 [[require]]
 name = "aesop"
 git  = "https://github.com/leanprover-community/aesop"
-rev = "v4.19.0"
+rev = "v4.20.0-rc2"
 
 [[lean_lib]]
 name = "AlgEffectus"
