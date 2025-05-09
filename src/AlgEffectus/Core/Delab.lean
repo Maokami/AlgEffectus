@@ -182,14 +182,14 @@ private partial def collectList (e : Expr) : Array Expr :=
 
 #eval eff return x
 
-#eval (Computation.seqC "y"
+#eval (Computation.seqC (.str .anonymous "y")
           (Computation.retC (Value.ttV))
-          (Computation.retC (Value.varV "y")))
+          (Computation.retC (Value.varV (.str .anonymous "y"))))
 
 def exampleComp₂ : Computation :=
-  Computation.seqC "y"
+  Computation.seqC (.str .anonymous "y")
     (Computation.retC (Value.ttV))
-    (Computation.retC (Value.varV "y"))
+    (Computation.retC (Value.varV (.str .anonymous "y")))
 
 end Delab
 end AlgEffectus.Core

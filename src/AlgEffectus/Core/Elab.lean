@@ -14,23 +14,26 @@ open Lean Lean.Elab AlgEffectus.Core.Parser
 
 private def getIdentName (n : TSyntax `ident) : Expr :=
   let nameStr := n.getId.toString
-  Expr.lit (Literal.strVal nameStr)
+  let strExpr := mkStrLit nameStr
+  let anon    := mkConst ``Lean.Name.anonymous
+  let mkStr   := mkConst ``Lean.Name.mkStr
+  mkApp2 mkStr anon strExpr
 
 private def mkOpTuple (opName argName kName bodyExpr : Expr) : Expr := by
   -- basic constants
-  let strTy  := mkConst ``String
+  let nameTy  := mkConst ``Name
   let compTy := mkConst ``Computation
   let prodTy := mkConst ``Prod [.zero, .zero]
   let prodMk := mkConst ``Prod.mk  [.zero, .zero]
 
   -- k × body : String × Computation
-  let pair3 := mkApp4 prodMk strTy compTy kName bodyExpr
+  let pair3 := mkApp4 prodMk nameTy compTy kName bodyExpr
   -- arg × (k × body) : String × (String × Computation)
-  let pair2Ty := mkApp2 prodTy strTy compTy
-  let pair2   := mkApp4 prodMk strTy pair2Ty argName pair3
+  let pair2Ty := mkApp2 prodTy nameTy compTy
+  let pair2   := mkApp4 prodMk nameTy pair2Ty argName pair3
   -- op × (arg × (k × body))
-  let pair1Ty := mkApp2 prodTy strTy pair2Ty
-  exact mkApp4 prodMk strTy pair1Ty opName pair2
+  let pair1Ty := mkApp2 prodTy nameTy pair2Ty
+  exact mkApp4 prodMk nameTy pair1Ty opName pair2
 
 
 /-! Elaborators: Map Syntax to AST -/
@@ -52,14 +55,14 @@ partial def elabValInternal : TSyntax `effVal → TermElabM Expr
   let retBodyExpr   ← elabCompInternal retC
 
   -- basic type aliases used throughout the tuple construction
-  let strTy  := mkConst ``String
+  let nameTy  := mkConst ``Name
   let compTy := mkConst ``Computation
   let prodTy := mkConst ``Prod [.zero, .zero]   -- Prod type constructor
 
   -- nested product types
-  let tyPair3 := mkApp2 prodTy strTy compTy     -- String × Computation
-  let tyPair2 := mkApp2 prodTy strTy tyPair3      -- String × (String × Computation)
-  let tupTy   := mkApp2 prodTy strTy tyPair2      -- final 3‑tuple type
+  let tyPair3 := mkApp2 prodTy nameTy compTy     -- String × Computation
+  let tyPair2 := mkApp2 prodTy nameTy tyPair3      -- String × (String × Computation)
+  let tupTy   := mkApp2 prodTy nameTy tyPair2      -- final 3‑tuple type
   let mut tupExprs : Array Expr := #[]
   for i in [:opArr.size] do
     let opSyntax   := opArr[i]!
