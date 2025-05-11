@@ -259,8 +259,8 @@ eff_program demo2 :=
     return x
 
 #eval demo2
-#eval! (step? demo2).get!
-#eval! (step? (step? demo2).get!).get!
+#eval (step? demo2).get!
+#eval (step? (step? demo2).get!).get!
 -- Examples of evaluation
 #eval interp demo
 #eval interp demo2

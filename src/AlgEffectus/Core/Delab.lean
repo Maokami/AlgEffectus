@@ -75,7 +75,7 @@ private def unpackOpTuple (e : Expr) : Option (String × String × String × Exp
   pure (op, arg, k, body)
 
 /-- Recursively collect the head elements of a `List.cons` chain. -/
-private partial def collectList (e : Expr) : Array Expr :=
+private def collectList (e : Expr) : Array Expr :=
   match e with
   | Expr.app (Expr.app (Expr.app (.const ``List.cons _) _) hd) tl =>
       #[hd] ++ collectList tl

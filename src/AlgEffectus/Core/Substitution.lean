@@ -14,6 +14,7 @@ mutual
   Capture-avoiding substitution with α-renaming (Monadic version).
   Replaces free occurrences of targetVar with replacement value.
   -/
+  @[simp]
   def substValueM (target : Name) (repl : Value) : Value -> AlphaSubstM Value
   | Value.varV n => do
     if n = target then return repl else return (Value.varV n)
@@ -42,6 +43,7 @@ mutual
   decreasing_by
     repeat dsimp [sizeOfValue]; simp
 
+  @[simp]
   def substHandlerM (target : Name) (repl : Value) : Handler -> AlphaSubstM Handler
   | Handler.mk rb rc opcs => do
     let rc' ← if rb = target then (return rc) else substCompM target repl rc
@@ -66,6 +68,7 @@ mutual
     simp +arith [Nat.le_trans h₁]
     dsimp [sizeOfHandler]; simp +arith
 
+  @[simp]
   def substCompM (target : Name) (repl : Value) : Computation → AlphaSubstM Computation
   | Computation.retC v => do
     let v' ← substValueM target repl v
@@ -121,3 +124,4 @@ def substHandler (target : Name) (repl : Value) (h : Handler) : Handler :=
   result
 
 end AlgEffectus.Core
+

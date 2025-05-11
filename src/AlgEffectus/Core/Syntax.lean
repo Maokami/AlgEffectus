@@ -76,12 +76,17 @@ end
 instance : Inhabited Handler where
   default := Handler.mk (Name.mkStr1 "") (Computation.retC (Value.ttV)) []
 
+/-- Type alias for operation clauses. -/
+abbrev OpClause := OpName × Name × Name × Computation
+
 /-! Helper functions for syntax manipulation -/
 mutual
   /-- Calculates the size of a list of operation clauses. -/
-  def sizeOfOpClauses : List (OpName × Name × Name × Computation) → Nat
-    | [] => 0
-    | (_,_,_,b)::rest => sizeOfComp b + sizeOfOpClauses rest
+  def sizeOfOpClauses : List OpClause → Nat
+    | [] => 1
+    | (_, _, _, c) :: tl =>
+      let size := sizeOfComp c
+      size + sizeOfOpClauses tl
 
   /-- Calculates the size of a value. -/
   def sizeOfValue : Value → Nat
@@ -93,7 +98,8 @@ mutual
 
   /-- Calculates the size of a handler. -/
   def sizeOfHandler : Handler → Nat
-    | Handler.mk _ rc opcs => 1 + sizeOfComp rc + sizeOfOpClauses opcs
+    | Handler.mk _ rc opcs =>
+      1 + sizeOfComp rc + sizeOfOpClauses opcs
 
   /-- Calculates the size of a computation. -/
   def sizeOfComp : Computation → Nat
@@ -110,30 +116,46 @@ Helpers: every `sizeOf…` measure is a natural number, hence
 trivially non‑negative.  We register these facts with `[simp]`
 so that `simp` (and therefore `simp_wf`) can use them automatically.
 -/
-@[simp] theorem sizeOfOpClauses_nonneg
-    (opcs : List (OpName × Name × Name × Computation)) :
-    (0 : Nat) ≤ sizeOfOpClauses opcs := by
-  exact Nat.zero_le _
+@[simp] theorem sizeOfOpClauses_pos (opcs : List OpClause) :
+    (0 : Nat) < sizeOfOpClauses opcs := by
+  induction opcs with
+  | nil => simp [sizeOfOpClauses] 
+  | cons _ _ ih =>
+    simp [sizeOfOpClauses]; apply Nat.add_pos_right
+    exact ih
 
-@[simp] theorem sizeOfValue_nonneg (v : Value) :
-    (0 : Nat) ≤ sizeOfValue v := by
-  exact Nat.zero_le _
+@[simp] theorem sizeOfValue_pos (v : Value) :
+    (0 : Nat) < sizeOfValue v := by
+  cases v with
+  | varV _ => simp [sizeOfValue]
+  | ttV => simp [sizeOfValue]
+  | ffV => simp [sizeOfValue]
+  | funV _ body => simp +arith [sizeOfValue]
+  | handV h => simp +arith [sizeOfValue]
 
-@[simp] theorem sizeOfHandler_nonneg (h : Handler) :
-    (0 : Nat) ≤ sizeOfHandler h := by
-  exact Nat.zero_le _
+@[simp] theorem sizeOfHandler_pos (h : Handler) :
+    (0 : Nat) < sizeOfHandler h := by
+  cases h with
+  | mk _ rc opcs => simp [sizeOfHandler]; simp +arith
 
-@[simp] theorem sizeOfComp_nonneg (c : Computation) :
-    (0 : Nat) ≤ sizeOfComp c := by
-  exact Nat.zero_le _
+@[simp] theorem sizeOfComp_pos (c : Computation) :
+    (0 : Nat) < sizeOfComp c := by
+  cases c with
+  | retC _ => simp +arith [sizeOfComp] 
+  | callC _ _ _ _ =>  simp +arith [sizeOfComp]
+  | seqC _ c1 c2 => simp +arith [sizeOfComp]
+  | ifC b t e => simp +arith [sizeOfComp]
+  | appC f a => simp +arith [sizeOfComp]
+  | withC h c => simp +arith [sizeOfComp]
 
 @[simp] theorem sizeOfComp_le_sizeOfOpClauses
-    {opcs : List (OpName × Name × Name × Computation)}
+    {opcs : List OpClause}
     {op x k c}
     (h : (op, x, k, c) ∈ opcs) :
     sizeOfComp c ≤ sizeOfOpClauses opcs := by
   induction h with
-  | head _ => dsimp [sizeOfOpClauses]; simp
+  | head _ =>
+    simp [sizeOfOpClauses]
   | tail _ _ ih₁=>
     simp [sizeOfOpClauses, Nat.le_trans ih₁]
 
@@ -149,7 +171,7 @@ def Handler.getRetClause : Handler → (Name × Computation)
 
 /-- Retrieves the list of operation clauses from a handler. -/
 @[simp]
-def Handler.getOpClauses : Handler → List (OpName × Name × Name × Computation)
+def Handler.getOpClauses : Handler → List OpClause
   | Handler.mk _ _ opc => opc
 
 /-- Finds the corresponding operation clause in a handler given an operation name. -/

@@ -7,7 +7,7 @@ import Std.Data.HashMap.Lemmas
 import Std.Data.DHashMap.Lemmas
 
 -- import LeanCopilot
--- import aesop
+import aesop
 
 open AlgEffectus.Core
 open scoped AlgEffectus.Core.Typing

@@ -6,6 +6,17 @@ import aesop
 open AlgEffectus.Core
 
 mutual
+  def renameOpClauses (old new : Name) : List OpClause → List OpClause
+  | [] => []
+  | (op, x, k, c_map) :: opcls =>
+    let c' := if x = old ∨ k = old then c_map else renameComp old new c_map
+    (op, x, k, c') :: renameOpClauses old new opcls
+
+  termination_by
+    opcls => sizeOfOpClauses opcls
+  decreasing_by
+    repeat simp [sizeOfOpClauses]
+
   def renameValue (old new : Name) : Value → Value
   | v@(Value.varV n)  => if n = old then Value.varV new else v
   | Value.funV x body =>
@@ -24,25 +35,13 @@ mutual
   | Handler.mk rb rc opcs =>
     let rb' := rb
     let rc' := if rb = old then rc else renameComp old new rc
-    let opcs' := opcs.map fun opcl =>
-      let (op,x,k,c) := opcl
-      -- When proving termination, changing `opcl.snd.snd.snd` to `c` causes issues.
-      let c' := if x = old ∨ k = old then c else renameComp old new opcl.snd.snd.snd
-      (op, x, k, c')
-
+    let opcs' := renameOpClauses old new opcs
     Handler.mk rb' rc' opcs'
 
   termination_by
     h => sizeOfHandler h
   decreasing_by
     repeat dsimp [sizeOfComp, sizeOfHandler]; simp +arith
-    rename_i h_mem
-    have h₁ : sizeOfComp opcl.snd.snd.snd ≤ sizeOfOpClauses opcs := by
-      induction h_mem with
-      | head _ => dsimp [sizeOfOpClauses]; simp
-      | tail _ _ ih₁=>
-        simp [sizeOfOpClauses, Nat.le_trans ih₁]
-    apply Nat.le_trans h₁; simp +arith
 
   def renameComp (old new : Name) : Computation → Computation
   | Computation.retC v              => Computation.retC (renameValue old new v)
@@ -70,7 +69,7 @@ mutual
 end
 
 mutual
-@[simp] theorem sizeOfValue_renameValue
+  @[simp] theorem sizeOfValue_renameValue
     (old new : Name) (v : Value) :
     sizeOfValue (renameValue old new v) = sizeOfValue v := by
   cases v with
@@ -78,57 +77,72 @@ mutual
   | ttV           => simp [renameValue, sizeOfValue]
   | ffV           => simp [renameValue, sizeOfValue]
   | funV x body   =>
-      by_cases h : x = old
-      <;> simp [renameValue, sizeOfValue, h, sizeOfComp_renameComp]
+      by_cases h : x = old <;> simp [renameValue, sizeOfValue, h]
+      apply sizeOfComp_renameComp
   | handV h       =>
-      simp [renameValue, sizeOfValue, sizeOfHandler_renameHandler]
+      simp [renameValue, sizeOfValue]; rw [sizeOfHandler_renameHandler]
 
   termination_by sizeOfValue v
-  decreasing_by repeat sorry
+  decreasing_by
+    repeat dsimp [sizeOfValue]; simp +arith
 
-@[simp] theorem sizeOfOpClauses_rename
-    (old new : Name) (opcs : List (OpName × Name × Name × Computation)) :
-    sizeOfOpClauses
-      (opcs.map fun (op,x,k,c) =>
-        let c' := if x = old ∨ k = old then c else renameComp old new c
-        (op,x,k,c')) = sizeOfOpClauses opcs := by
-    induction opcs with
-    | nil       => simp [sizeOfOpClauses]
-    | cons hd tl ih =>
-        rcases hd with ⟨op,x,k,c⟩
-        by_cases h' : (x = old ∨ k = old)
-        <;> simp [sizeOfOpClauses, h', renameComp, ih, sizeOfComp_renameComp]
+  @[simp] theorem sizeOfOpClauses_renameOpClauses
+    (old new : Name) (opcs : List OpClause) :
+    sizeOfOpClauses (renameOpClauses old new opcs) = sizeOfOpClauses opcs := by
+    cases opcs with
+    | nil       => simp [renameOpClauses, sizeOfOpClauses]
+    | cons hd tl =>
+      simp [sizeOfOpClauses]; rw [renameOpClauses]
+      by_cases h₁ : hd.2.1 = old ∨ hd.2.2.1 = old <;>
+        simp [renameValue, sizeOfValue, h₁]; rw [sizeOfOpClauses]
+      · rw [sizeOfOpClauses_renameOpClauses]
+      · rw [sizeOfOpClauses]; rw [sizeOfComp_renameComp]; rw [sizeOfOpClauses_renameOpClauses]
 
   termination_by sizeOfOpClauses opcs
-  decreasing_by sorry
+  decreasing_by
+    repeat simp [sizeOfOpClauses]
 
-@[simp] theorem sizeOfHandler_renameHandler
+  @[simp] theorem sizeOfHandler_renameHandler
     (old new : Name) (h : Handler) :
     sizeOfHandler (renameHandler old new h) = sizeOfHandler h := by
   cases h with
   | mk rb rc opcs =>
-      simp [renameHandler, sizeOfHandler, sizeOfOpClauses_rename]
-      split <;> simp [sizeOfComp_renameComp]
+      simp [renameHandler, sizeOfHandler]
+      rw [sizeOfOpClauses_renameOpClauses]
+      split <;> simp; rw [sizeOfComp_renameComp]
 
   termination_by sizeOfHandler h
-  decreasing_by repeat sorry
+  decreasing_by
+    repeat dsimp [sizeOfHandler]; simp +arith
 
 @[simp] theorem sizeOfComp_renameComp
     (old new : Name) (c : Computation) :
     sizeOfComp (renameComp old new c) = sizeOfComp c := by
   cases c with
-  | retC v => simp [renameComp, sizeOfComp, sizeOfValue_renameValue]
+  | retC v => simp [renameComp, sizeOfComp]; apply sizeOfValue_renameValue
   | callC op arg k body =>
-      simp [renameComp, sizeOfComp, sizeOfValue_renameValue]
-      split <;> simp [sizeOfComp_renameComp]
+      simp only [renameComp, sizeOfComp]
+      rw [sizeOfValue_renameValue]
+      split
+      · rfl
+      · rw [sizeOfComp_renameComp]
   | seqC x c₁ c₂ =>
-      simp [renameComp, sizeOfComp]
-      split <;> simp [sizeOfComp_renameComp]
-  | ifC b t e => simp [sizeOfComp_renameComp]
-  | appC f a => simp [renameComp, sizeOfComp, sizeOfValue_renameValue]
+      simp only [renameComp, sizeOfComp]
+      split
+      · rw [sizeOfComp_renameComp]
+      · repeat rw [sizeOfComp_renameComp]
+  | ifC b t e =>
+    simp only [renameComp, sizeOfComp]
+    rw [sizeOfValue_renameValue]
+    repeat rw [sizeOfComp_renameComp]
+  | appC f a =>
+    simp [renameComp, sizeOfComp];
+    repeat rw [sizeOfValue_renameValue]
   | withC h c =>
-    simp [renameComp, sizeOfComp, sizeOfValue_renameValue, sizeOfComp_renameComp]
+    simp [renameComp, sizeOfComp]
+    rw [sizeOfValue_renameValue]; rw [sizeOfComp_renameComp]
 
   termination_by sizeOfComp c
-  decreasing_by repeat sorry
+  decreasing_by
+    repeat dsimp [sizeOfComp]; simp +arith
 end
