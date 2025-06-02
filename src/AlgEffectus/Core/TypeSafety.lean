@@ -2,9 +2,6 @@ import AlgEffectus.Core.Parser
 import AlgEffectus.Core.Semantics
 import AlgEffectus.Core.Substitution
 import AlgEffectus.Core.Typing
-import Std.Data.HashMap
-import Std.Data.HashMap.Lemmas
-import Std.Data.DHashMap.Lemmas
 
 -- import LeanCopilot
 import aesop
@@ -14,9 +11,46 @@ open scoped AlgEffectus.Core.Typing
 open scoped AlgEffectus.Core.Semantics
 
 open Std
-lemma insert_insert_eq_override {α β} [BEq α] [Hashable α] (m : Std.HashMap α β) (k : α) (v₁ v₂ : β) :
-  (m.insert k v₁).insert k v₂ = m.insert k v₂ := by
-  sorry
+mutual
+  lemma weaken_val {σ Γ x A v B}
+    (hfresh : Γ.lookup x = none ∨ Γ.lookup x = some A)
+    (hv : σ, Γ ⊢ᵥ v : B) :
+    σ, Γ.insert x A ⊢ᵥ v : B := by
+    cases hv with
+    | var h_mem =>
+      rename_i n; apply TyVal.var
+      -- split hfresh
+      cases hfresh with
+      | inl h_none => admit
+      | inr h_some => admit
+    | tt => exact TyVal.tt
+    | ff => exact TyVal.ff
+    | fun_ hbody =>
+      rename_i x' A' C body; apply TyVal.fun_
+      -- split hfresh
+      cases hfresh with
+      | inl h_none => admit
+      | inr h_some => admit
+    | hand h =>
+      simp [StateT.run] at *
+      cases h with
+      | mk rb rc opcls =>
+      cases hfresh with
+      | inl h_none => admit
+      | inr h_some => admit
+
+  lemma weaken_comp {σ Γ x A c C}
+    (hfresh : Γ.lookup x = none ∨ Γ.lookup x = some A)
+    (hc : σ, Γ ⊢ c : C) :
+    σ, Γ.insert x A ⊢ c : C := by
+    admit
+
+  lemma weaken_hdl {σ Γ x A h C D}
+    (hfresh : Γ.lookup x = none ∨ Γ.lookup x = some A)
+    (hh : TyHdl σ Γ h C D) :
+    TyHdl σ (Γ.insert x A) h C D := by
+    admit
+end
 
 mutual
   lemma substComp_retC_eq_retC_substValue (x : Name) (vA : Value) (v : Value) :
@@ -35,53 +69,94 @@ mutual
       | var h_mem =>
         simp [substValueM] at *
         split_ifs with hnx
-        · -- 1.  n = x  ----------------------------------------------------
+        · -- 1.  n = x
           cases hnx
-          have hAB : A = B := by
-            have h': (Γ.insert x A).get? x = some A := by simp
-            simp [h'] at h_mem; exact h_mem
+          have hAB : A = B := by simpa using h_mem
           cases hAB; simpa using hv
-        · -- 2.  n ≠ x  ----------------------------------------------------
-          have hΓ : Γ.get? n = some B := by
-            simp [hnx]; simp [Std.HashMap.getElem?_insert] at h_mem
-            rwa [if_neg] at h_mem; tauto
+        · -- 2.  n ≠ x
+          have hΓ : Γ.lookup n = some B := by
+            rw [← h_mem]; simp [hnx]
           simpa using TyVal.var hΓ
     | ttV => cases hvs with
       | tt => simpa [substValueM] using TyVal.tt
     | ffV => cases hvs with
       | ff => simpa [substValueM] using TyVal.ff
-    | funV x c => cases hvs with
-      | fun_ hbody =>
-        rename_i x' A' C
-        simp [substValueM] at *
-        split_ifs with hnx
-        · -- 1.  x = x'  ----------------------------------------------------
-          cases hnx
-          split; rename_i  y result' snd' heq'
-          cases heq'
-          have h₁: σ, Γ ⊢ᵥ (Value.funV x' c) :  (VTy.funT A' C) := by
-            apply TyVal.fun_
-            have h₀: (Γ.insert x' A).insert x' A' = Γ.insert x' A' := by
-              apply insert_insert_eq_override
-            simp [h₀] at hbody; exact hbody
-          exact h₁
-        · -- 2.  x ≠ x'  ----------------------------------------------------
-          rename_i h'
-          cases hbody
-          sorry
-        · -- 3.
-          sorry
+    | funV x c => cases hvs with | fun_ hbody =>
+      rename_i x' A' C
+      simp [substValueM] at *
+      split_ifs with hnx hxf
+      · -- 1.  x = x'
+        cases hnx
+        split; rename_i  y result' snd' heq'
+        cases heq'
+        apply TyVal.fun_; simp at hbody; exact hbody
+      · -- 2.  x ≠ x' ∧ x ∈ freeVarsValue vA
+        apply TyVal.fun_
+        simp [substCompM]
+        cases hbody
+        repeat sorry
+      · -- 3. x ≠ x' ∧ x ∉ freeVarsValue vA
+        apply TyVal.fun_
+        simp [substCompM]
+        cases hbody
+        repeat sorry
     | handV h =>
       simp [substValueM] at *
       cases h with
       | mk rb rc opcls =>
         cases hvs
-        sorry
+        rename_i C D th
+        simp [substValueM] at *
+        split_ifs with hrbx
+        · admit
+        · admit
 
+lemma subst_valM_preserves
+  {σ Γ x vA A v B ctx}
+  (hv : σ, Γ ⊢ᵥ vA : A)
+  (hvs: σ, (Γ.insert x A) ⊢ᵥ v : B)
+  : σ, Γ ⊢ᵥ (substValueM x vA v ctx).1 : B := by
+  admit
 
-        simp [substHandlerM]
-        sorry
+lemma subst_compM_preserves
+  {σ Γ x vA A c C ctx}
+  (hv : σ, Γ ⊢ᵥ vA : A)
+  (hc : σ, (Γ.insert x A) ⊢ c : C) :
+  σ, Γ ⊢ (substCompM x vA c ctx).1 : C := by
+  revert ctx
+  cases c with
+  | retC v =>
+    intro ctx
+    cases hc with | ret hv_v =>
+    rename_i B Δ
+    simp [substCompM]
+    apply TyComp.ret
+    apply subst_valM_preserves hv hv_v
 
+  | callC op arg k body =>
+    intro ctx
+    cases hc with | call_ hfresh sig targ tcont mem =>
+    rename_i Aᵢ Bᵢ A' Δ
+    simp [substCompM]
+    split_ifs with hkx
+    · -- 1. k = x
+      cases hkx; simp at hfresh
+    · -- 2. k ≠ x
+      have h₁ : σ, Γ ⊢ᵥ (substValueM x vA arg ctx).1 : Aᵢ := by apply subst_valM_preserves hv targ
+      have hfresh': Γ.lookup k = none := by
+        simpa [hkx] using hfresh
+      have hv' : σ, Γ.insert k Bᵢ ⊢ᵥ vA : A := by
+        exact weaken_val (Or.inl hfresh') hv
+      have tcont' : σ, (Γ.insert k Bᵢ).insert x A ⊢ body : A' !{Δ} := by
+        rw [CtxLemmas.insert_insert_of_ne hkx]; exact tcont
+      have hbody' : σ, Γ.insert k Bᵢ ⊢
+      (substCompM x vA body (substValueM x vA arg ctx).2).1 : A' !{Δ} := by
+        exact subst_compM_preserves hv' tcont'
+      exact TyComp.call_ hfresh' sig h₁ hbody' mem
+  | seqC x c₁ c₂ => admit
+  | ifC b t e => admit
+  | appC f a => admit
+  | withC h c => admit
 
   lemma subst_comp_preserves
       {σ Γ x vA A c C}
@@ -92,9 +167,25 @@ mutual
     | retC v =>
       cases hc with | ret hv_v =>
       rename_i B Δ
-      admit
+      simp [substComp]
+      apply TyComp.ret
+      apply subst_val_preserves hv hv_v
     | callC op arg k body =>
-      admit
+      cases hc with | call_ hfresh sig targ tcont mem =>
+      rename_i Aᵢ Bᵢ A' Δ
+      simp [substComp]
+      split_ifs with hkx
+      · -- 1. k = x
+        cases hkx; simp at hfresh
+      · -- 2. k ≠ x
+        have h₁ : σ, Γ ⊢ᵥ (substValue x vA arg) : Aᵢ := by apply subst_val_preserves hv targ
+        have hfresh': Γ.lookup k = none := by
+          simpa [hkx] using hfresh
+        apply TyComp.call_ hfresh' sig h₁
+        · simp [StateT.run]
+          apply weaken_comp (Or.inl hfresh')
+          · admit
+        · exact mem
     | seqC x c₁ c₂ => admit
     | ifC b t e => admit
     | appC f a => admit
@@ -108,10 +199,11 @@ mutual
     := by admit
 end
 
-theorem preservation {σ Γ c c' C} :
-  (σ, Γ ⊢ c : C) → (c ⤳ c') → (σ, Γ ⊢ c' : C)
+theorem preservation {σ Γ c c' C}
+  (hTy: σ, Γ ⊢ c : C)
+  (hStep: c ⤳ c')
+: σ, Γ ⊢ c' : C
 := by
-  intro hTy hStep
   induction hStep generalizing C with
   | seq_step h₁ ih  =>
     rename_i x c₁ c₁' c₂
@@ -128,13 +220,42 @@ theorem preservation {σ Γ c c' C} :
       rename_i A B Δ
       cases t₁ with | ret t₁' =>
         exact subst_comp_preserves t₁' t₂
-  | seq_op     => admit
-  | if_true    => admit
-  | if_false   => admit
-  | app_β      => admit
-  | with_step  => admit
-  | with_ret   => admit
-  | with_handled   => admit
+  | seq_op     =>
+    rename_i op x v y c₁ c₂ hxy
+    cases hTy with | seq t₁ t₂ =>
+      rename_i A B Δ
+      cases t₁ with | call_ hfresh sig targ tcont mem =>
+      rename_i Aᵢ Bᵢ
+      have tcont' : σ, Γ.insert y Bᵢ ⊢ Computation.seqC x c₁ c₂ : B !{Δ} := by
+        apply TyComp.seq tcont
+        have hyx : y ≠ x := Ne.symm hxy
+        rw [CtxLemmas.insert_insert_of_ne hyx]
+        apply weaken_comp
+        · rw [CtxLemmas.lookup_insert_ne hyx]; rw [hfresh]; simp
+        · exact t₂
+      exact TyComp.call_ hfresh sig targ tcont' mem
+  | if_true  =>
+    rename_i c₁' c₂'
+    cases hTy with | if_ tb tt te => exact tt
+  | if_false   =>
+    rename_i c₁' c₂'
+    cases hTy with | if_ tb tt te => exact te
+  | app_β      =>
+    rename_i x c₁' v
+    cases hTy with | app tf ta =>
+      apply subst_comp_preserves ta
+      cases tf with | fun_ hbody => exact hbody
+  | with_step hStep ih =>
+    rename_i h c₁' c₂'
+    cases hTy with | with_ th tc =>
+      rename_i C'
+      apply TyComp.with_ th; exact ih tc
+  | with_ret hyRet  =>
+    rename_i h c₁
+    cases hTy with | with_ th tc =>
+      rename_i x c_ret C'
+      admit
+  | with_handled hySucc => admit
   | with_unhandled => admit
 
 theorem progress {σ c A Δ} :

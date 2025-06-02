@@ -119,7 +119,7 @@ so that `simp` (and therefore `simp_wf`) can use them automatically.
 @[simp] theorem sizeOfOpClauses_pos (opcs : List OpClause) :
     (0 : Nat) < sizeOfOpClauses opcs := by
   induction opcs with
-  | nil => simp [sizeOfOpClauses] 
+  | nil => simp [sizeOfOpClauses]
   | cons _ _ ih =>
     simp [sizeOfOpClauses]; apply Nat.add_pos_right
     exact ih
@@ -141,7 +141,7 @@ so that `simp` (and therefore `simp_wf`) can use them automatically.
 @[simp] theorem sizeOfComp_pos (c : Computation) :
     (0 : Nat) < sizeOfComp c := by
   cases c with
-  | retC _ => simp +arith [sizeOfComp] 
+  | retC _ => simp +arith [sizeOfComp]
   | callC _ _ _ _ =>  simp +arith [sizeOfComp]
   | seqC _ c1 c2 => simp +arith [sizeOfComp]
   | ifC b t e => simp +arith [sizeOfComp]
@@ -178,6 +178,21 @@ def Handler.getOpClauses : Handler → List OpClause
 def Handler.findOpClause (h : Handler) (opName : OpName) : Option (Name × Name × Computation) :=
   h.getOpClauses.find? (fun (op, _, _, _) => op == opName) -- Find clause by op name
   |>.map (fun (_, x, k, body) => (x, k, body)) -- Extract (continuation_binder, arg_binder, body)
+
+lemma findOpClause_mem {rb rc opcs op x k body}
+  (hmem : (Handler.mk rb rc opcs).findOpClause op = some (x, k, body)):
+  (op, x, k, body)  ∈ opcs := by
+    simp [Handler.findOpClause] at hmem
+    rcases hmem with ⟨found_op_name, h_find_eq_some⟩
+    have h_item_in_list : (found_op_name, x, k, body) ∈ opcs :=
+    List.mem_of_find?_eq_some h_find_eq_some
+    have h_predicate_true : (fun y => y.1 == op) (found_op_name, x, k, body) = true := by
+      apply List.find?_some h_find_eq_some
+    have h_opname_eq : found_op_name = op := by
+      apply eq_of_beq
+      exact h_predicate_true
+    rw [h_opname_eq] at h_item_in_list
+    exact h_item_in_list
 
 /-- Checks if a computation is a value (specifically, `return v`). -/
 def Computation.isValue : Computation → Bool
@@ -314,7 +329,7 @@ def fresh (nameToMakeFreshAgainst : Name) (ctx : AlphaCtx) : Name × AlphaCtx :=
       (nameCandidate, ngen)
 
     termination_by stepsToFreshNat ngen.namePrefix ngen.idx effectiveAvoidSet
-    decreasing_by 
+    decreasing_by
        -- Simplify definitions like ngen.curr, ngen.next
       simp [Lean.NameGenerator.next]
 
@@ -327,7 +342,7 @@ def fresh (nameToMakeFreshAgainst : Name) (ctx : AlphaCtx) : Name × AlphaCtx :=
       have h_s_curr_pos : 0 < s_curr := by
         rename_i h'
         dsimp [s_curr, nameCandidate] at h'
-        exact stepsToFreshNat_pos_of_mem h'  
+        exact stepsToFreshNat_pos_of_mem h'
 
 
       -- Get the defining property of s_curr

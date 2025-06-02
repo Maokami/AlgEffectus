@@ -34,7 +34,7 @@ inductive Step : Computation → Computation → Prop where
 
   /-- Rule (Seq-O): `do x ← call op(v; y. c₁) in c₂ ⤳ call op(v ; y. do x ← c₁ in c₂)`.
       Propagates an operation out of a do-block. -/
-  | seq_op {op x v y c₁ c₂} :
+  | seq_op {op x v y c₁ c₂} (hxy : x ≠ y):
     Step (Computation.seqC x (Computation.callC op v y c₁) c₂)
          (Computation.callC op v y (Computation.seqC x c₁ c₂))
 
@@ -110,7 +110,9 @@ match c with
       match c₁ with
       | Computation.retC v => some (substComp x v c₂) -- Rule seq_return
       | Computation.callC op arg y kBody => -- Rule seq_op
-          some (Computation.callC op arg y (Computation.seqC x kBody c₂))
+        -- Ensure x and y are distinct to avoid variable capture
+        if x = y then none
+        else some (Computation.callC op arg y (Computation.seqC x kBody c₂))
       | _ => none -- c₁ is irreducible but not return/call, so seqC is stuck here
 
   -- Conditional (`if cond then c₁ else c₂`)
@@ -169,7 +171,7 @@ theorem soundness : ∀ {c c'}, Step c c' → step? c = some c' := by
   cases hStep with
   | seq_step hyStep => simp [step?]; rw [soundness hyStep]
   | seq_return => simp [step?]
-  | seq_op => simp [step?]
+  | seq_op hxy => simp [step?, hxy]
   | if_true => simp [step?]
   | if_false => simp [step?]
   | app_β => simp [step?]
@@ -192,7 +194,10 @@ theorem completeness : ∀ {c c'}, step? c = some c' → Step c c' := by
       simp [h₁'] at hStep
       cases c₁ with
       | retC v => simp at hStep; subst hStep; exact Step.seq_return
-      | callC op arg y kBody => simp at hStep; subst hStep; exact Step.seq_op
+      | callC op arg y kBody =>
+        simp at hStep
+        have hxy : x ≠ y := by apply hStep.left
+        rw [← hStep.right]; exact Step.seq_op hxy
       | _ => contradiction
   | ifC cond t e =>
     simp [step?] at hStep

@@ -1,6 +1,6 @@
 import AlgEffectus.Core.Syntax
-import Std.Data.HashMap
 import Mathlib.Data.Finset.Basic
+import Mathlib.Data.Finmap
 
 /-!
 # Core Type System for Algebraic Effects and Handlers
@@ -8,7 +8,7 @@ import Mathlib.Data.Finset.Basic
 This module defines the core type system for algebraic effects and handlers.
 -/
 
-open scoped Finset Std.HashMap
+open scoped Finset
 
 namespace AlgEffectus.Core
 
@@ -39,27 +39,46 @@ namespace CTy
     ops.foldl (fun s op => s.erase op) Δ
 end CTy
 
-abbrev Ctx := Std.HashMap Name VTy
+abbrev Ctx := Finmap (fun _ : Name => VTy)
 
 namespace Ctx
-  def insertMany (Γ : Ctx) (l : List (Name × VTy)) : Ctx :=
-    l.foldl (fun m ⟨x, τ⟩ => Std.HashMap.insert m x τ) Γ
+  @[simp] def insert (Γ : Ctx) (x : Name) (A : VTy) : Ctx :=
+    Finmap.insert x A Γ
+
+  @[simp] def insertMany (Γ : Ctx) (l : List (Name × VTy)) : Ctx :=
+    l.foldl (fun m ⟨x, τ⟩ => Finmap.insert x τ m) Γ
+
+  @[simp] def lookup (Γ : Ctx) (x : Name) : Option VTy :=
+    Finmap.lookup x Γ
 end Ctx
+
+namespace CtxLemmas
+  @[simp] lemma lookup_insert_self {Γ : Ctx} {x A} :
+  (Γ.insert x A).lookup x = some A := by simp
+
+  @[simp] lemma lookup_insert_ne {x y} {Γ : Ctx} (h : y ≠ x) :
+      (Γ.insert x A).lookup y = Γ.lookup y := by simp [h]
+
+  lemma insert_insert_of_ne {Γ : Ctx} {x y : Name} {A B: VTy} (hxy : x ≠ y) :
+    (Γ.insert x A).insert y B = (Γ.insert y B).insert x A := by
+    simp [Finmap.insert_insert_of_ne Γ hxy]
+
+end CtxLemmas
 
 /-- Parameter/result pair for an operation. -/
 structure OpSig where
   param : VTy
   res : VTy
 
-/-- A global signature mapping (`σ`) each `OpName` to its parameter/return types. -/
-abbrev OpSigMap := Std.HashMap OpName OpSig
+/-- A global signature  (`σ`) each `OpName` to its parameter/return types. -/
+abbrev OpSigMap := Finmap (fun _ : OpName => OpSig)
 
 /-! ## Typing judgements -/
 mutual
   /-- Typing judgement for values and computations. -/
   inductive TyVal :
     (σ : OpSigMap) → (Γ : Ctx) → Value → VTy → Prop
-  | var  {x A}  (hx: Γ.get? x = some A) : TyVal σ Γ (Value.varV x) A
+  | var  {x A}  (hx: Γ.lookup x = some A) : TyVal σ Γ (Value.varV x) A
   | tt : TyVal σ Γ Value.ttV VTy.boolT
   | ff : TyVal σ Γ Value.ffV VTy.boolT
   | fun_ {x A C body} (hbody : TyComp σ (Γ.insert x A) body C) : TyVal σ Γ (Value.funV x body) (VTy.funT A C)
@@ -74,17 +93,17 @@ mutual
       {A B : VTy } {Δ Δ' : Finset OpName}
       (ret : TyComp σ (Γ.insert rb A) rc (B !{Δ'}))
       (ops :
-        ∀ {op x k body Aop Bop},
+        ∀ {op x k body Aᵢ Bᵢ},
         (op, x, k, body) ∈ opcs →
-        σ.get? op = some ⟨Aop, Bop⟩ →
+        σ.lookup op = some ⟨Aᵢ, Bᵢ⟩ →
         TyComp
           σ
           (Γ.insertMany
-            [(x,Aop),(k, VTy.funT Bop (B !{Δ'}))]
+            [(x,Aᵢ),(k, VTy.funT Bᵢ (B !{Δ'}))]
           )
           body
           -- Maybe `A !{Δ}` instead of `B !{Δ'}`?
-          (A !{Δ})
+          (B !{Δ})
       )
       (eff :
         CTy.eraseMany Δ (opcs.map (fun t => t.fst)) ⊆ Δ'
@@ -96,10 +115,11 @@ mutual
   (σ : OpSigMap) → (Γ : Ctx)  → Computation → CTy → Prop
   | ret   {v A Δ}        : TyVal σ Γ v A →
                              TyComp σ Γ (Computation.retC v) (A !{Δ})
-  | call_  {Γ op arg y body Aop Bop A Δ}
-          (sig  : σ.get? op = some ⟨Aop, Bop⟩)
-          (targ : TyVal σ Γ arg Aop)
-          (tcont: TyComp σ (Γ.insert y Bop) body (A !{Δ}))
+  | call_ {Γ op arg y body Aᵢ Bᵢ A Δ}
+          (hfresh : Γ.lookup y = none)
+          (sig  : σ.lookup op = some ⟨Aᵢ, Bᵢ⟩)
+          (targ : TyVal σ Γ arg Aᵢ)
+          (tcont: TyComp σ (Γ.insert y Bᵢ) body (A !{Δ}))
           (mem  : op ∈ Δ)
           : TyComp σ Γ (Computation.callC op arg y body) (A !{Δ})
   | seq   {Γ x c₁ c₂ A B Δ}
