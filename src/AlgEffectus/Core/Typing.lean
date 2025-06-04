@@ -87,28 +87,15 @@ mutual
   /-- Handler typing (*auxiliary*, mirror of rule (Handler) in the paper). -/
   inductive TyHdl :
   (σ : OpSigMap) → (Γ : Ctx) → Handler → CTy → CTy → Prop
-  | mk
-      {rb   : Name} {rc : Computation}
+  | mk {rb   : Name} {rc : Computation}
       {opcs : List (OpName × Name × Name × Computation)}
       {A B : VTy } {Δ Δ' : Finset OpName}
+      (hkfresh : ∀ {op x k body}, (op, x, k, body) ∈ opcs → Γ.lookup k = none ∧ x ≠ k)
       (ret : TyComp σ (Γ.insert rb A) rc (B !{Δ'}))
-      (ops :
-        ∀ {op x k body Aᵢ Bᵢ},
-        (op, x, k, body) ∈ opcs →
-        σ.lookup op = some ⟨Aᵢ, Bᵢ⟩ →
-        TyComp
-          σ
-          (Γ.insertMany
-            [(x,Aᵢ),(k, VTy.funT Bᵢ (B !{Δ'}))]
-          )
-          body
-          -- Maybe `A !{Δ}` instead of `B !{Δ'}`?
-          (B !{Δ})
+      (ops : ∀ {op x k body Aᵢ Bᵢ}, (op, x, k, body) ∈ opcs → σ.lookup op = some ⟨Aᵢ, Bᵢ⟩ →
+        TyComp σ (Γ.insertMany [(x,Aᵢ),(k, VTy.funT Bᵢ (B !{Δ'}))]) body (B !{Δ'})
       )
-      (eff :
-        CTy.eraseMany Δ (opcs.map (fun t => t.fst)) ⊆ Δ'
-      )
-      :
+      (eff : CTy.eraseMany Δ (opcs.map (fun t => t.fst)) ⊆ Δ') :
       TyHdl σ Γ (Handler.mk rb rc opcs) (A !{Δ}) (B !{Δ'})
 
   inductive TyComp :
@@ -131,12 +118,14 @@ mutual
           (tt : TyComp σ Γ t (A !{Δ}))
           (te : TyComp σ Γ e (A !{Δ}))
           : TyComp σ Γ (Computation.ifC b t e) (A !{Δ})
-  | app   {Γ f a A C}      (tf : TyVal σ Γ f (VTy.funT A C))
-                            (ta : TyVal σ Γ a A)
-                            : TyComp σ Γ (Computation.appC f a) C
-  | with_ {Γ h c C D}      (th : TyVal σ Γ h (VTy.hdlT C D))
-                            (tc : TyComp σ Γ c C)
-                            : TyComp σ Γ (Computation.withC h c) D
+  | app   {Γ f a A C}
+          (tf : TyVal σ Γ f (VTy.funT A C))
+          (ta : TyVal σ Γ a A)
+          : TyComp σ Γ (Computation.appC f a) C
+  | with_ {Γ h c C D}
+          (th : TyVal σ Γ h (VTy.hdlT C D))
+          (tc : TyComp σ Γ c C)
+          : TyComp σ Γ (Computation.withC h c) D
 end
 
 namespace Typing
